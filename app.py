@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
@@ -9,7 +10,7 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 DB_FILE = "Reporte de Asistencia.xlsx"
 
 def cargar_datos():
-    if os.path.exists(DB_FILE):
+    if os.path.exists(DB_FILE):
         try:
             df = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None)
             df_procesado = pd.DataFrame()
@@ -207,4 +208,4 @@ with tab3:
             if not df_filtrado_asist.empty:
                 st.dataframe(df_filtrado_asist, use_container_width=True)
             else:
-                st.info("No hay registros de asistencia para esta ficha.")"  Requiero ahora abrir otra ventana que me llene la información de la Hoja "Cabezote" Puede ser que se haga un archivo nuevo y que también se haga un archivo de la hoja "Listado de aprendices"
+                st.info("No hay registros de asistencia para esta ficha.")"  Requiero ahora de la hoja Cabezote se seleccione l columna AV como parte de los datos de materia
