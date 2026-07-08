@@ -208,4 +208,4 @@ with tab3:
             if not df_filtrado_asist.empty:
                 st.dataframe(df_filtrado_asist, use_container_width=True)
             else:
-                st.info("No hay registros de asistencia para esta ficha.")"  Requiero ahora de la hoja Cabezote se seleccione l columna AV como parte de los datos de materia
+                st.info("No hay registros de asistencia para esta ficha.")
