@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
@@ -148,7 +148,7 @@ st.sidebar.info(f"📚 **Materia Vinculada:**\n{materia_detectada}")
 alumnos_ficha = df_aprendices[df_aprendices["Ficha"] == ficha_seleccionada].reset_index(drop=True)
 st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_ficha)}")
 
-# --- PESTAÑAS DE LA APLICACIÓN ---
+# --- PESTAÑAS DE LA APLICACIÓN (Se añade la cuarta pestaña) ---
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Cargar y Actualizar Bases"])
 
 # PESTAÑA 1: LLAMADO A LISTA
@@ -261,7 +261,7 @@ with tab3:
             else:
                 st.info("No hay registros de asistencia para esta ficha.")
 
-# PESTAÑA 4: GESTIÓN Y CARGA DE BASES DE EXCEL
+# NUEVA PESTAÑA 4: GESTIÓN Y CARGA DE BASES DE EXCEL
 with tab4:
     st.header("📂 Carga de Archivos de Configuración")
     st.markdown("Desde esta sección puedes estructurar y unificar el archivo maestro de datos (`Reporte de Asistencia.xlsx`) subiendo los archivos correspondientes.")
@@ -278,6 +278,7 @@ with tab4:
         
     st.markdown("---")
     
+    # Botón para unificar y procesar la información
     if st.button("🧩 Procesar e Integrar Base de Datos Maestro", type="primary"):
         if file_cabezote is not None and file_aprendices is not None:
             try:
@@ -285,6 +286,7 @@ with tab4:
                     df_c = pd.read_excel(file_cabezote, header=None)
                     df_a = pd.read_excel(file_aprendices, header=None)
                     
+                    # Escritura multi-hoja en la ruta local del proyecto
                     with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
                         df_c.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
                         df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
@@ -296,3 +298,4 @@ with tab4:
                 st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
         else:
             st.warning("Por favor cargue ambos archivos (Cabezote y Aprendices) antes de procesar.")
+            
