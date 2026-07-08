@@ -10,7 +10,7 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 DB_FILE = "Reporte de Asistencia.xlsx"
 
 def cargar_datos():
-    if os.path.exists(DB_FILE):
+        if os.path.exists(DB_FILE):
         try:
             df = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None)
             df_procesado = pd.DataFrame()
