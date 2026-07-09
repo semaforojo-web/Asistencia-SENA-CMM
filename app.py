@@ -315,7 +315,7 @@ with tab4:
             
             # Fila 3: Resultados, Horas y Tiempos
             c8, c9, c10, c11 = st.columns([3, 1, 1, 1])
-            input_ra = c8.text_input("Resultados de Aprendizaje (Columna L / Posición 11):")
+            input_ra = c8.text_input("Línea (Columna L / Posición 11):")
             input_linea = c9.text_input("Línea (Columna M / Posición 12):")
             input_horas = c10.text_input("Número de Horas (Columna N / Posición 13):")
             input_fecha_ini = c11.text_input("Fecha de inicio (Columna O / Posición 14):", placeholder="DD/MM/AAAA")
