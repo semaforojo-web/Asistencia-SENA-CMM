@@ -59,7 +59,7 @@ if not st.session_state["autenticado"]:
         else:
             st.error("Contraseña incorrecta. Por favor, intente de nuevo.")
 else:
-    # Botón para cerrar sesión en la parte superior derecha si se desea
+    # Botón para cerrar sesión en la barra lateral
     if st.sidebar.button("🔒 Cerrar Sesión"):
         st.session_state["autenticado"] = False
         st.rerun()
@@ -81,7 +81,7 @@ else:
     if not df_instructores.empty:
         instructores_lista = df_instructores.iloc[:, 0].dropna().unique().tolist()
         instructor_seleccionado = st.sidebar.selectbox("Seleccione Instructor:", instructores_lista)
-else:
+    else:
         instructor_seleccionado = st.sidebar.selectbox("Seleccione Instructor:", ["No hay instructores - Configure en Pestaña 4"])
 
     # Filtrar Fichas/Grupos asignados a ese instructor en Cabezote
@@ -202,7 +202,7 @@ else:
                         instructor_seleccionado, 
                         nuevo_grupo, 
                         trimestre_seleccionado, 
-                    nueva_asignacion
+                        nueva_asignacion
                     ]])
                     df_cabezote_final = pd.concat([df_cabezote_actual, nueva_fila_cabezote], ignore_index=True)
 
