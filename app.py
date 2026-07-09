@@ -380,9 +380,7 @@ with tab4:
                 input_trimestre = c_f1.text_input("Trimestre reportado (Columna AV / Posición 47):", placeholder="Ej: Trimestre 1")
                 input_observaciones = c_f2.text_input("Observaciones (Columna AW / Posición 48):")
             
-            boton_agregar_cab = st.form_submit_button("💾 Insertar Registro Estructurado Completo", type="primary")
-            
-        if boton_agregar_cab:
+            if boton_agregar_cab:
             if input_grupo and input_instructor and input_trimestre:
                 try:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
@@ -391,6 +389,7 @@ with tab4:
                     # Definimos el ancho exacto del Cabezote (49 celdas indexadas de 0 a 48)
                     ancho_columnas = 49
                     nueva_fila = [""] * ancho_columnas
+                    
                     # Mapeo Exacto de los Índices según tus especificaciones
                     nueva_fila[3] = str(input_asignacion_num).strip()          # Columna D
                     nueva_fila[5] = str(input_instructor).strip().upper()       # Columna F
@@ -458,27 +457,27 @@ with tab4:
                     else:
                         df_cab_final = df_nueva_fila
                     
+                    # --- NÚCLEO DE GUARDADO BLINDADO (REEMPLAZA AL ANTERIOR) ---
                     with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
+                        # 1. Guardamos el cabezote actualizado
                         df_cab_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+                        
+                        # 2. Rescatamos y guardamos el listado de aprendices si existe
                         if not df_apr_existente.empty:
                             df_apr_existente.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
-                            
+                        
+                        # 3. Rescatamos y mantenemos los instructores para no perder el login
+                        if os.path.exists(DB_FILE):
+                            try:
+                                df_inst_actual = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None)
+                                df_inst_actual.to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
+                            except Exception:
+                                # Si la hoja se borró por accidente, generamos una fila de emergencia
+                                pd.DataFrame([[instructor_seleccionado, "SENA2026"]]).to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
+                                
                     st.success("¡Ambiente maestro e información de sesiones inyectados correctamente!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al escribir en el Excel: {e}")
             else:
                 st.warning("El Grupo, Instructor y Trimestre son obligatorios para indexar el registro.")
-
-    elif opcion_carga == "📁 Subir Archivos Completos (.xlsx)":
-        # Se mantiene la carga manual intacta para casos de sobreescritura total
-        st.markdown("Sube las hojas de cálculo por separado para realizar un empaquetado general.")
-        file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"])
-        file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"])
-        if st.button("🧩 Procesar e Integrar Base de Datos Maestro"):
-            if file_cabezote and file_aprendices:
-                with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
-                    pd.read_excel(file_cabezote, header=None).to_excel(writer, sheet_name="Cabezote", index=False, header=False)
-                    pd.read_excel(file_aprendices, header=None).to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
-                st.success("Configurado con éxito.")
-                st.rerun()
