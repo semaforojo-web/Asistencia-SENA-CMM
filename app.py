@@ -366,4 +366,8 @@ with tab4:
                             df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
                             
                     st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado correctamente.")
-                    st.button("🔄 Re
+                    st.button("🔄 Refrescar datos ahora", on_click=st.rerun)
+                except Exception as e:
+                    st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
+            else:
+                st.warning("Por favor cargue ambos archivos antes de procesar.")
