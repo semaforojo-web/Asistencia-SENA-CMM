@@ -9,7 +9,7 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 
 # Nombre del archivo original de Excel en tu repositorio de GitHub
 DB_FILE = "Reporte de Asistencia.xlsx"
-REPO_NAME = "tu_usuario_de_github/asistencia-sena-cmm"  # 👈 CAMBIA ESTO por tu usuario y repositorio real
+REPO_NAME = "semaforojo-web/asistencia-sena-cmm"  # 👈 CAMBIA ESTO por tu usuario y repositorio real
 
 # ==========================================
 # FUNCIÓN DE LOGICA PERSISTENTE EN GITHUB
