@@ -376,7 +376,7 @@ with tab4:
             input_asignacion_num = c3.selectbox("Número de asignación (Columna D / Posición 3):", ["1", "2", "3"])
             input_trimestre = c4.text_input("Trimestre de la formación (Columna AV / Posición 47):", placeholder="Ej: Trimestre 3")
             
-            input_materia_nombre = st.text_input("Nombre Detallado de la Asignatura (Columna K / Posición 10):", placeholder="Ej: Mantenimiento Correctivo de Sistemas Electromecánicos")
+            input_materia_nombre = st.text_input("Resultados de aprendizaje (Columna K / Posición 10):", placeholder="Ej: Mantenimiento Correctivo de Sistemas Electromecánicos")
             
             boton_agregar_cab = st.form_submit_button("💾 Insertar Fila en Cabezote de Excel", type="primary")
             
