@@ -1,4 +1,4 @@
-import streamlit as pd
+import streamlit as st
 import pandas as pd
 import os
 
@@ -56,7 +56,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ------------------------------------------
 # BARRA LATERAL (FILTROS GLOBALES)
 # ------------------------------------------
-st.sidebar.header("🔍 Filtros de Selección")
+st.sidebar.header("🔍 Filtros de Selection")
 
 # Selector de Instructor
 if not df_instructores.empty:
@@ -165,7 +165,7 @@ with tab4:
         horizontal=True
     )
     
-    # OPCIÓN 1: FORMULARIO INTEGRADO (AQUÍ ESTÁ LA NUEVA LÓGICA)
+    # Formulario integrado para agregar fichas
     if opcion_carga == "✏️ Registrar Nueva Ficha / Modificar Cabezote":
         st.subheader("Formulario de Registro de Asignaciones")
         
@@ -188,36 +188,32 @@ with tab4:
                 df_cabezote_final = pd.concat([df_cabezote_actual, nueva_fila_cabezote], ignore_index=True)
 
                 # ==========================================
-                # 🔥 CONTROL DE FICHA NUEVA AUTOMÁTICA
+                # CONTROL DE FICHA NUEVA AUTOMÁTICA
                 # ==========================================
                 ficha_existe = False
                 if not df_aprendices_actual.empty and df_aprendices_actual.shape[1] > 4:
-                    # Buscamos en la columna E (índice 4), saltándonos posibles encabezados
                     fichas_registradas = df_aprendices_actual.iloc[:, 4].dropna().astype(str).unique()
                     if str(nuevo_grupo) in fichas_registradas:
                         ficha_existe = True
 
-                # Si la ficha NO existe en los aprendices, creamos el alumno de emergencia
                 if not ficha_existe:
                     num_columnas = df_aprendices_actual.shape[1] if not df_aprendices_actual.empty else 16
                     fila_emergencia = [""] * num_columnas
                     
-                    # Índices estándar SENA: E(4)=Ficha, L(11)=Doc, M(12)=Nombre, N(13)=Apellido
                     if num_columnas > 4:
-                        fila_emergencia[4] = nuevo_grupo       # Columna E
+                        fila_emergencia[4] = nuevo_grupo       
                     if num_columnas > 11:
-                        fila_emergencia[11] = 0                # Columna L (Documento provisional)
+                        fila_emergencia[11] = 0                
                     if num_columnas > 12:
-                        fila_emergencia[12] = "NUEVA FICHA"     # Columna M
+                        fila_emergencia[12] = "NUEVA FICHA"     
                     if num_columnas > 13:
-                        fila_emergencia[13] = "(Sin alumnos)"   # Columna N
+                        fila_emergencia[13] = "(Sin alumnos)"   
                     
                     nueva_fila_aprendiz = pd.DataFrame([fila_emergencia])
                     df_aprendices_final = pd.concat([df_aprendices_actual, nueva_fila_aprendiz], ignore_index=True)
                 else:
                     df_aprendices_final = df_aprendices_actual
 
-                # Asegurar que la hoja de instructores no esté vacía
                 if df_instructores.empty:
                     df_instructores = pd.DataFrame([[instructor_seleccionado, "SENA2026"]])
 
@@ -229,14 +225,13 @@ with tab4:
                     if not df_asistencias.empty:
                         df_asistencias.to_excel(writer, sheet_name="Asistencias", index=False, header=False)
                     if not df_notas.empty:
-                        df_notas.to_excel(writer, sheet_name="Notas", index=False, header=False)
+                        df_notas.to_excel(writer, sheet_name="Notes", index=False, header=False)
 
                 st.success(f"¡Ficha {nuevo_grupo} registrada exitosamente en Cabezote y habilitada de inmediato!")
                 st.rerun()
             else:
                 st.error("Por favor, introduce un número de ficha válido.")
 
-    # OPCIÓN 2: SUBIR ARCHIVOS INDEPENDIENTES
     elif opcion_carga == "📁 Subir Archivos Completos (.xlsx)":
         st.markdown("Sube las hojas de cálculo por separado para realizar un empaquetado general.")
         file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"])
@@ -248,7 +243,6 @@ with tab4:
                     pd.read_excel(file_cabezote, header=None).to_excel(writer, sheet_name="Cabezote", index=False, header=False)
                     pd.read_excel(file_aprendices, header=None).to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
                     
-                    # Conservar instructores
                     if os.path.exists(DB_FILE):
                         try:
                             pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None).to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
@@ -258,7 +252,7 @@ with tab4:
                 st.rerun()
 
     # ==========================================
-    # 🔥 SECCIÓN INTEGRAL: BOTÓN DE DESCARGA REAL
+    # BOTÓN DE DESCARGA
     # ==========================================
     st.markdown("---")
     st.subheader("📥 Descargar Base de Datos Actualizada")
