@@ -327,7 +327,12 @@ with tab3:
             df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
             st.dataframe(df_eval_hist, use_container_width=True)
 
-if opcion_carga == "✍️ Alimentar Cabezote Directamente (Formulario)":
+# PESTAÑA 4: GESTIÓN DE BASES DE DATOS (CON CONEXIÓN DIRECTA A GITHUB)
+with tab4:
+    st.header("📂 Gestión y Alimentación de la Base de Datos")
+    opcion_carga = st.radio("Seleccione el método para gestionar datos:", ["✍️ Alimentar Cabezote Directamente (Formulario)", "📁 Subir Archivos Completos (.xlsx)"])
+    
+    if opcion_carga == "✍️ Alimentar Cabezote Directamente (Formulario)":
         with st.form("form_registro_directo_cabezote"):
             c1, c2 = st.columns(2)
             input_grupo = c1.text_input("Número de Grupo:")
