@@ -9,6 +9,35 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 # Nombre del archivo original de Excel en tu repositorio de GitHub
 DB_FILE = "Reporte de Asistencia.xlsx"
 
+def obtener_instructores_y_contraseñas():
+    """
+    Lee los instructores (Columna A) y sus contraseñas (Columna B) 
+    desde la hoja 'Listado de instructores'
+    """
+    dict_usuarios = {}
+    lista_instructores = []
+    
+    if os.path.exists(DB_FILE):
+        try:
+            df_inst = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None)
+            
+            # Recorremos el archivo fila por fila
+            for idx, row in df_inst.iterrows():
+                nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
+                # Si no hay contraseña asignada en la columna B, por defecto se usa "SENA2026"
+                password = str(row[1]).strip() if df_inst.shape[1] > 1 and pd.notna(row[1]) else "SENA2026"
+                
+                # Filtrar posibles encabezados o celdas vacías
+                if nombre.upper() != "INSTRUCTOR" and nombre != "" and nombre.upper() != "NAN":
+                    dict_usuarios[nombre] = password
+                    lista_instructores.append(nombre)
+                    
+            return sorted(lista_instructores), dict_usuarios
+        except Exception:
+            return ["Falta hoja 'Listado de instructores'"], {}
+            
+    return ["No Detectado"], {}
+
 def cargar_datos():
     """Carga y procesa el listado de aprendices desde la hoja correspondiente"""
     if os.path.exists(DB_FILE):
@@ -42,20 +71,6 @@ def cargar_datos():
             
     data = {"Ficha": ["Error"], "Documento": ["0"], "Nombre Completo": ["ARCHIVO EXCEL NO DETECTADO"]}
     return pd.DataFrame(data)
-
-def obtener_instructores_desde_lista():
-    """Busca los nombres de los instructores en la hoja dedicada 'Listado de instructores' (Columna A)"""
-    if os.path.exists(DB_FILE):
-        try:
-            df_inst = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None)
-            # Tomamos la primera columna (Posición 0)
-            instructores = df_inst.iloc[:, 0].dropna().astype(str).str.strip().unique().tolist()
-            # Limpieza de posibles encabezados repetidos
-            instructores = [i for i in instructores if i.upper() != "INSTRUCTOR" and i != "" and i.upper() != "NAN"]
-            return sorted(instructores)
-        except Exception:
-            return ["Falta hoja 'Listado de instructores'"]
-    return ["No Detectado"]
 
 def obtener_trimestres_disponibles(ficha, instructor):
     """Busca los trimestres vinculados a una ficha e instructor en el Cabezote"""
@@ -126,9 +141,47 @@ def filtrar_materia_final(ficha, instructor, trimestre, materia_num):
             return f"Error: {e}"
     return "Archivo Excel no encontrado"
 
-# --- CONFIGURACIÓN DE DATOS INICIALES ---
+# --- MANEJO DEL ESTADO DE SESIÓN (LOGIN) ---
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+if "instructor_logueado" not in st.session_state:
+    st.session_state["instructor_logueado"] = None
+
+# Cargar la lista de usuarios y contraseñas desde el Excel
+lista_instructores_login, mapeo_credenciales = obtener_instructores_y_contraseñas()
+
+# --- PANTALLA DE INGRESO (LOGIN) ---
+if not st.session_state["autenticado"]:
+    st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema de Asistencia - SENA</h2>", unsafe_allow_html=True)
+    
+    with st.container():
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            with st.form("form_login"):
+                instructor_input = st.selectbox("Seleccione su Nombre de Instructor:", lista_instructores_login)
+                password_input = st.text_input("Introduzca su contraseña personal:", type="password")
+                
+                boton_ingresar = st.form_submit_button("🚀 Ingresar a la Aplicación", use_container_width=True)
+                
+            if boton_ingresar:
+                if instructor_input not in ["No Detectado", "Falta hoja 'Listado de instructores'"]:
+                    # Obtener la contraseña correcta mapeada para ESTE instructor en específico
+                    contraseña_esperada = mapeo_credenciales.get(instructor_input, "SENA2026")
+                    
+                    if password_input == contraseña_esperada:
+                        st.session_state["autenticado"] = True
+                        st.session_state["instructor_logueado"] = instructor_input
+                        st.success("¡Acceso concedido!")
+                        st.rerun()
+                    else:
+                        st.error("Contraseña incorrecta para el instructor seleccionado. Inténtelo de nuevo.")
+                else:
+                    st.error("Por favor, verifique la estructura de instructores en su archivo Excel.")
+    st.stop()
+
+# --- EJECUCIÓN PRINCIPAL (SÓLO SI PASÓ EL LOGIN) ---
 df_aprendices = cargar_datos()
-lista_instructores = obtener_instructores_desde_lista()
+instructor_seleccionado = st.session_state["instructor_logueado"]
 
 # Creación de históricos locales si no existen
 if not os.path.exists("asistencia_guardada.csv"):
@@ -139,19 +192,24 @@ if not os.path.exists("evaluaciones_guardadas.csv"):
 
 # --- INTERFAZ SIDEBAR (BARRA LATERAL) ---
 st.title("📊 Dashboard de Gestión de Ambientes de Formación - SENA")
+
+if st.sidebar.button("🔒 Cerrar Sesión"):
+    st.session_state["autenticado"] = False
+    st.session_state["instructor_logueado"] = None
+    st.rerun()
+
+st.sidebar.markdown(f"👤 **Instructor activo:**\n`{instructor_seleccionado}`")
+st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Filtros de Planificación")
 
 lista_fichas = sorted(df_aprendices["Ficha"].dropna().unique())
 ficha_seleccionada = st.sidebar.selectbox("1. Seleccione la Ficha:", lista_fichas if lista_fichas else ["Error"])
 
-# El selector ahora se alimenta del Listado de Instructores
-instructor_seleccionado = st.sidebar.selectbox("2. Seleccione el Instructor (Lista):", lista_instructores)
-
 lista_trimestres_dinamicos = obtener_trimestres_disponibles(ficha_seleccionada, instructor_seleccionado)
-trimestre_seleccionado = st.sidebar.selectbox("3. Seleccione el Trimestre:", lista_trimestres_dinamicos)
+trimestre_seleccionado = st.sidebar.selectbox("2. Seleccione el Trimestre:", lista_trimestres_dinamicos)
 
 lista_materias_dinamicas = obtener_materias_disponibles(ficha_seleccionada, instructor_seleccionado, trimestre_seleccionado)
-materia_num_seleccionada = st.sidebar.selectbox("4. Seleccione Materia:", lista_materias_dinamicas)
+materia_num_seleccionada = st.sidebar.selectbox("3. Seleccione Materia:", lista_materias_dinamicas)
 
 materia_detectada = filtrar_materia_final(ficha_seleccionada, instructor_seleccionado, trimestre_seleccionado, materia_num_seleccionada)
 
@@ -267,20 +325,20 @@ with tab3:
     with sub_tab1:
         if os.path.exists("asistencia_guardada.csv"):
             df_asist_hist = pd.read_csv("asistencia_guardada.csv")
-            df_filtrado_asist = df_asist_hist[df_asist_hist["Ficha"].astype(str) == str(ficha_seleccionada)]
+            df_filtrado_asist = df_asist_hist[(df_asist_hist["Ficha"].astype(str) == str(ficha_seleccionada)) & (df_asist_hist["Instructor"].astype(str).str.upper() == str(instructor_seleccionado).upper())]
             if not df_filtrado_asist.empty:
                 st.dataframe(df_filtrado_asist, use_container_width=True)
             else:
-                st.info("No hay registros de asistencia para esta ficha.")
+                st.info("No hay registros de asistencia guardados por usted para esta ficha.")
                 
     with sub_tab2:
         if os.path.exists("evaluaciones_guardadas.csv"):
             df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
-            df_filtrado_eval = df_eval_hist[df_eval_hist["Ficha"].astype(str) == str(ficha_seleccionada)]
+            df_filtrado_eval = df_eval_hist[(df_eval_hist["Ficha"].astype(str) == str(ficha_seleccionada)) & (df_eval_hist["Instructor"].astype(str).str.upper() == str(instructor_seleccionado).upper())]
             if not df_filtrado_eval.empty:
                 st.dataframe(df_filtrado_eval, use_container_width=True)
             else:
-                st.info("No hay registros de evaluaciones para esta ficha.")
+                st.info("No hay registros de evaluaciones guardados por usted para esta ficha.")
 
 # PESTAÑA 4: GESTIÓN DE BASES DE DATOS
 with tab4:
@@ -295,7 +353,7 @@ with tab4:
         with st.form("form_registro_directo_cabezote"):
             c1, c2 = st.columns(2)
             input_ficha = c1.text_input("Número de Ficha (Columna G / Posición 6):", placeholder="Ej: 2613452")
-            input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", placeholder="Ej: CARLOS ENRIQUE")
+            input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", value=instructor_seleccionado)
             
             c3, c4 = st.columns(2)
             input_materia_num = c3.selectbox("Número de Materia (Columna D / Posición 3):", ["1", "2", "3"])
@@ -311,10 +369,8 @@ with tab4:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     
-                    # Adaptación dinámica del ancho para prevenir desfase de celdas
                     ancho_columnas = max(df_cab_existente.shape[1], 48) if not df_cab_existente.empty else 48
                     
-                    # Relleno automatizado de columnas inactivas
                     nueva_fila = [""] * ancho_columnas
                     nueva_fila[3] = str(input_materia_num).strip()
                     nueva_fila[5] = str(input_instructor).strip().upper()
@@ -336,7 +392,6 @@ with tab4:
                         if not df_apr_existente.empty:
                             df_apr_existente.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
                         else:
-                            # Previene fallas si la hoja de aprendices está inicialmente ausente
                             base_aprendices = [""] * 16
                             base_aprendices[4] = "Ficha"
                             base_aprendices[11] = "Documento"
@@ -364,7 +419,33 @@ with tab4:
                         "Trimestre": df_preview[47]
                     }).dropna(subset=["Ficha", "Instructor"], how="all")
                     st.dataframe(df_resumen, use_container_width=True)
-            except Exception as e:
+            except Exception:
+                pass
+
+    elif opcion_carga == "📁 Subir Archivos Completos (.xlsx)":
+        st.markdown("Sube las hojas de cálculo por separado para realizar un empaquetado general desde cero.")
+        col_up1, col_up2 = st.columns(2)
+        with col_up1:
+            st.subheader("1. Hoja Cabezote")
+            file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"], key="up_cab_v2")
+        with col_up2:
+            st.subheader("2. Hoja Listado de Aprendices")
+            file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"], key="up_apr_v2")
+            
+        if st.button("🧩 Procesar e Integrar Base de Datos Maestro", type="primary"):
+            if file_cabezote is not None and file_aprendices is not None:
+                try:
+                    with st.spinner("Unificando el archivo maestro..."):
+                        df_c = pd.read_excel(file_cabezote, header=None)
+                        df_a = pd.read_excel(file_aprendices, header=None)
+                        
+                        with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
+                            df_c.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+                            df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                            
+                    st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado correctamente.")
+                    st.rerun()
+                except Exception as e:
                     st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
             else:
                 st.warning("Por favor cargue ambos archivos antes de procesar.")
