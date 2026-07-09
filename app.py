@@ -85,9 +85,9 @@ def obtener_trimestres_disponibles(grupo, instructor):
             
             if not resultado.empty and resultado.shape[1] > 47:
                 trimestres = resultado.iloc[:, 47].dropna().astype(str).str.strip().unique().tolist()
-                trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() != "NAN" and t.upper() != "TRIMESTRE"])
-                if trimestres_validos:
-                    return trimestres_validos
+                trimestres_validas = sorted([t for t in trimestres if t != "" and t.upper() != "NAN" and t.upper() != "TRIMESTRE"])
+                if trimestres_validas:
+                    return trimestres_validas
         except Exception:
             pass
     return ["Sin trimestres detectados"]
@@ -222,7 +222,6 @@ st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_grupo)}")
 # --- PESTAÑAS ---
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Alimentar y Cargar Bases"])
 
-# PESTAÑA 1, 2 y 3 se mantienen iguales (Compactadas para mantener foco en el cambio)
 with tab1:
     st.header(f"📋 Control de Asistencia")
     st.subheader(f"Grupo: {grupo_seleccionado} | Trimestre: {trimestre_seleccionado}")
@@ -315,7 +314,7 @@ with tab4:
             
             # Fila 3: Resultados, Horas y Tiempos
             c8, c9, c10, c11 = st.columns([3, 1, 1, 1])
-            input_ra = c8.text_input("Línea (Columna L / Posición 11):")
+            input_ra = c8.text_input("Resultado de Aprendizaje (Columna L / Posición 11):")
             input_linea = c9.text_input("Línea (Columna M / Posición 12):")
             input_horas = c10.text_input("Número de Horas (Columna N / Posición 13):")
             input_fecha_ini = c11.text_input("Fecha de inicio (Columna O / Posición 14):", placeholder="DD/MM/AAAA")
@@ -380,17 +379,18 @@ with tab4:
                 input_trimestre = c_f1.text_input("Trimestre reportado (Columna AV / Posición 47):", placeholder="Ej: Trimestre 1")
                 input_observaciones = c_f2.text_input("Observaciones (Columna AW / Posición 48):")
             
-            if boton_agregar_cab:
+            boton_agregar_cab = st.form_submit_button("💾 Insertar Registro Estructurado Completo", type="primary")
+            
+        # PROCESAMIENTO FUERA DEL FORM_SUBMIT CONTENEDOR PERO DEPENDIENTE DE ÉL
+        if boton_agregar_cab:
             if input_grupo and input_instructor and input_trimestre:
                 try:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     
-                    # Definimos el ancho exacto del Cabezote (49 celdas indexadas de 0 a 48)
                     ancho_columnas = 49
                     nueva_fila = [""] * ancho_columnas
                     
-                    # Mapeo Exacto de los Índices según tus especificaciones
                     nueva_fila[3] = str(input_asignacion_num).strip()          # Columna D
                     nueva_fila[5] = str(input_instructor).strip().upper()       # Columna F
                     nueva_fila[6] = str(input_grupo).strip()                    # Columna G (GRUPO)
@@ -402,20 +402,17 @@ with tab4:
                     nueva_fila[12] = str(input_linea).strip()                   # Columna M (Línea)
                     nueva_fila[13] = str(input_horas).strip()                   # Columna N (Horas)
                     nueva_fila[14] = str(input_fecha_ini).strip()               # Columna O (Fecha inicio)
-                    # Columna P queda libre o vacía ("")
                     nueva_fila[16] = str(input_ambiente).strip()                # Columna Q (Ambiente)
                     nueva_fila[17] = str(input_dia).strip()                     # Columna R (Día)
                     nueva_fila[18] = str(input_horario).strip()                 # Columna S (Horario)
                     nueva_fila[19] = str(input_jornada).strip()                 # Columna T (Jornada)
                     
-                    # Evidencias 1 a 5 (Posiciones 20 a 24)
                     nueva_fila[20] = str(input_ev1).strip()
                     nueva_fila[21] = str(input_ev2).strip()
                     nueva_fila[22] = str(input_ev3).strip()
                     nueva_fila[23] = str(input_ev4).strip()
                     nueva_fila[24] = str(input_ev5).strip()
                     
-                    # Descripciones Prácticas 1 a 11 (Posiciones 25 a 35)
                     nueva_fila[25] = str(input_p1).strip()
                     nueva_fila[26] = str(input_p2).strip()
                     nueva_fila[27] = str(input_p3).strip()
@@ -428,7 +425,6 @@ with tab4:
                     nueva_fila[34] = str(input_p10).strip()
                     nueva_fila[35] = str(input_p11).strip()
                     
-                    # Nombres de las Sesiones 1 a 11 (Posiciones 36 a 46)
                     nueva_fila[36] = str(input_s1).strip()
                     nueva_fila[37] = str(input_s2).strip()
                     nueva_fila[38] = str(input_s3).strip()
@@ -441,14 +437,12 @@ with tab4:
                     nueva_fila[45] = str(input_s10).strip()
                     nueva_fila[46] = str(input_s11).strip()
                     
-                    # Cierre
                     nueva_fila[47] = str(input_trimestre).strip()               # Columna AV (Trimestre)
                     nueva_fila[48] = str(input_observaciones).strip()           # Columna AW (Observaciones)
                     
                     df_nueva_fila = pd.DataFrame([nueva_fila])
                     
                     if not df_cab_existente.empty:
-                        # Forzamos que coincidan las estructuras rellenando columnas faltantes
                         if df_cab_existente.shape[1] < ancho_columnas:
                             for col_idx in range(df_cab_existente.shape[1], ancho_columnas):
                                 df_cab_existente[col_idx] = ""
@@ -457,22 +451,18 @@ with tab4:
                     else:
                         df_cab_final = df_nueva_fila
                     
-                    # --- NÚCLEO DE GUARDADO BLINDADO (REEMPLAZA AL ANTERIOR) ---
+                    # --- NÚCLEO DE GUARDADO BLINDADO ---
                     with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
-                        # 1. Guardamos el cabezote actualizado
                         df_cab_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
                         
-                        # 2. Rescatamos y guardamos el listado de aprendices si existe
                         if not df_apr_existente.empty:
                             df_apr_existente.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
                         
-                        # 3. Rescatamos y mantenemos los instructores para no perder el login
                         if os.path.exists(DB_FILE):
                             try:
                                 df_inst_actual = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None)
                                 df_inst_actual.to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
                             except Exception:
-                                # Si la hoja se borró por accidente, generamos una fila de emergencia
                                 pd.DataFrame([[instructor_seleccionado, "SENA2026"]]).to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
                                 
                     st.success("¡Ambiente maestro e información de sesiones inyectados correctamente!")
@@ -481,3 +471,21 @@ with tab4:
                     st.error(f"Error al escribir en el Excel: {e}")
             else:
                 st.warning("El Grupo, Instructor y Trimestre son obligatorios para indexar el registro.")
+
+    elif opcion_carga == "📁 Subir Archivos Completos (.xlsx)":
+        st.markdown("Sube las hojas de cálculo por separado para realizar un empaquetado general.")
+        file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"])
+        file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"])
+        if st.button("🧩 Procesar e Integrar Base de Datos Maestro"):
+            if file_cabezote and file_aprendices:
+                with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
+                    pd.read_excel(file_cabezote, header=None).to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+                    pd.read_excel(file_aprendices, header=None).to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                    # Intentar rescatar la hoja de instructores también en la carga masiva para evitar bloqueos
+                    if os.path.exists(DB_FILE):
+                        try:
+                            pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None).to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
+                        except Exception:
+                            pd.DataFrame([[instructor_seleccionado, "SENA2026"]]).to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
+                st.success("Configurado con éxito.")
+                st.rerun()
