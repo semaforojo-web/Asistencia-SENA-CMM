@@ -210,7 +210,7 @@ lista_trimestres_dinamicos = obtener_trimestres_disponibles(grupo_seleccionado, 
 trimestre_seleccionado = st.sidebar.selectbox("3. Seleccione el Trimestre (Columna AV):", lista_trimestres_dinamicos)
 
 lista_asignaciones_dinamicas = obtener_materias_disponibles(grupo_seleccionado, instructor_seleccionado, trimestre_seleccionado)
-asignacion_num_seleccionada = st.sidebar.selectbox("4. Seleccione Materia o Asignación (Columna D):", lista_asignaciones_dinamicas)
+asignacion_num_seleccionada = st.sidebar.selectbox("4. Seleccione Asignación (Columna D):", lista_asignaciones_dinamicas)
 
 materia_detectada = filtrar_materia_final(grupo_seleccionado, instructor_seleccionado, trimestre_seleccionado, asignacion_num_seleccionada)
 
