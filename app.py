@@ -340,7 +340,7 @@ with tab4:
             c3, c4 = st.columns(2)
             input_asignacion_num = c3.selectbox("Número de asignación:", ["1", "2", "3"])
             input_trimestre = c4.text_input("Trimestre de la formación:")
-            input_materia_nombre = st.text_input("Nombre Detallado de la Asignatura:")
+            input_materia_nombre = st.text_input("Resulados de Aprendizaje:")
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
             
         if boton_agregar_cab:
