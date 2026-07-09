@@ -353,7 +353,7 @@ with tab4:
                     ancho_columnas = max(df_cab_existente.shape[1], 48) if not df_cab_existente.empty else 48
                     nueva_fila = [""] * ancho_columnas
                     nueva_fila[3] = str(input_asignacion_num).strip()
-                    nueva_fila[5] = str(input_instructor).strip().upper()
+                    nueva_fila[5] = str(input_instructor).strip()
                     nueva_fila[6] = str(input_grupo).strip()
                     nueva_fila[10] = str(input_materia_nombre).strip()
                     nueva_fila[47] = str(input_trimestre).strip()
