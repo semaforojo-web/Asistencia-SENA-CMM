@@ -50,7 +50,6 @@ def obtener_parametros_cabezote():
     return ["No Detectado"]
 
 def obtener_trimestres_disponibles(ficha, instructor):
-    """Busca qué trimestres reales (AV - Columna 47) existen para una ficha e instructor específicos"""
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
@@ -70,7 +69,6 @@ def obtener_trimestres_disponibles(ficha, instructor):
     return ["Sin trimestres detectados"]
 
 def obtener_materias_disponibles(ficha, instructor, trimestre):
-    """Busca qué números de materia (D - Columna 3) existen con los filtros previos"""
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
@@ -93,7 +91,6 @@ def obtener_materias_disponibles(ficha, instructor, trimestre):
     return ["1", "2", "3"]
 
 def filtrar_materia_final(ficha, instructor, trimestre, materia_num):
-    """Filtra de manera estricta por los 4 parámetros simultáneos en Cabezote"""
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
@@ -110,7 +107,6 @@ def filtrar_materia_final(ficha, instructor, trimestre, materia_num):
             resultado = df_cab[filtro]
             
             if not resultado.empty:
-                # Columna K (Materia/Resultado) -> Posición 10
                 materia_texto = resultado.iloc[0, 10] if resultado.shape[1] > 10 else resultado.iloc[0, 3]
                 if pd.notna(materia_texto) and str(materia_texto).strip() != "":
                     return str(materia_texto).strip()
@@ -125,6 +121,9 @@ lista_instructores = obtener_parametros_cabezote()
 
 if not os.path.exists("asistencia_guardada.csv"):
     pd.DataFrame(columns=["Fecha", "Ficha", "Instructor", "Trimestre", "Materia_Num", "Materia_Nombre", "Documento", "Nombre", "Asistencia"]).to_csv("asistencia_guardada.csv", index=False)
+
+if not os.path.exists("evaluaciones_guardadas.csv"):
+    pd.DataFrame(columns=["Fecha", "Ficha", "Instructor", "Trimestre", "Materia", "Documento", "Nombre", "Evaluación (A/D)", "Observaciones"]).to_csv("evaluaciones_guardadas.csv", index=False)
 
 # --- INTERFAZ SIDEBAR ---
 st.title("📊 Dashboard de Gestión de Ambientes de Formación - SENA")
@@ -148,8 +147,8 @@ st.sidebar.info(f"📚 **Materia Vinculada:**\n{materia_detectada}")
 alumnos_ficha = df_aprendices[df_aprendices["Ficha"] == ficha_seleccionada].reset_index(drop=True)
 st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_ficha)}")
 
-# --- PESTAÑAS DE LA APLICACIÓN (Se añade la cuarta pestaña) ---
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Cargar y Actualizar Bases"])
+# --- PESTAÑAS DE LA APLICACIÓN ---
+tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Alimentar y Cargar Bases"])
 
 # PESTAÑA 1: LLAMADO A LISTA
 with tab1:
@@ -160,7 +159,7 @@ with tab1:
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
     
     if alumnos_ficha.empty or ficha_seleccionada == "Error":
-        st.warning(f"No hay aprendices activos asignados a la ficha seleccionada.")
+        st.warning(f"No hay aprendices activos asignados a la ficha seleccionada o el archivo maestro está vacío.")
     else:
         with st.form(key=f"formulario_asistencia_{ficha_seleccionada}"):
             st.markdown("Marque la casilla si el aprendiz se encuentra **Presente**:")
@@ -198,8 +197,7 @@ with tab1:
                 })
             
             df_nuevo = pd.DataFrame(registros)
-            file_exists = os.path.exists("asistencia_guardada.csv")
-            df_nuevo.to_csv("asistencia_guardada.csv", mode='a', header=not file_exists, index=False)
+            df_nuevo.to_csv("asistencia_guardada.csv", mode='a', header=False, index=False)
             st.success(f"¡Asistencia de '{materia_detectada}' guardada exitosamente!")
             st.rerun()
 
@@ -260,42 +258,112 @@ with tab3:
                 st.dataframe(df_filtrado_asist, use_container_width=True)
             else:
                 st.info("No hay registros de asistencia para esta ficha.")
+                
+    with sub_tab2:
+        if os.path.exists("evaluaciones_guardadas.csv"):
+            df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
+            df_filtrado_eval = df_eval_hist[df_eval_hist["Ficha"].astype(str) == str(ficha_seleccionada)]
+            if not df_filtrado_eval.empty:
+                st.dataframe(df_filtrado_eval, use_container_width=True)
+            else:
+                st.info("No hay registros de evaluaciones para esta ficha.")
 
-# NUEVA PESTAÑA 4: GESTIÓN Y CARGA DE BASES DE EXCEL
+# PESTAÑA 4: ALIMENTAR DIRECTAMENTE O POR ARCHIVOS
 with tab4:
-    st.header("📂 Carga de Archivos de Configuración")
-    st.markdown("Desde esta sección puedes estructurar y unificar el archivo maestro de datos (`Reporte de Asistencia.xlsx`) subiendo los archivos correspondientes.")
+    st.header("📂 Gestión y Alimentación de la Base de Datos")
     
-    col_up1, col_up2 = st.columns(2)
+    opcion_carga = st.radio("Seleccione el método para gestionar datos:", ["✍️ Alimentar Cabezote Directamente (Formulario)", "📁 Subir Archivos Completos (.xlsx)"])
     
-    with col_up1:
-        st.subheader("1. Hoja Cabezote")
-        file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"], key="up_cab")
+    if opcion_carga == "✍️ Alimentar Cabezote Directamente (Formulario)":
+        st.subheader("📝 Agregar un nuevo registro a la hoja 'Cabezote'")
+        st.markdown("Ingresa los datos correspondientes. Estos se guardarán directamente respetando las posiciones exactas de las columnas.")
         
-    with col_up2:
-        st.subheader("2. Hoja Listado de Aprendices")
-        file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"], key="up_apr")
-        
-    st.markdown("---")
-    
-    # Botón para unificar y procesar la información
-    if st.button("🧩 Procesar e Integrar Base de Datos Maestro", type="primary"):
-        if file_cabezote is not None and file_aprendices is not None:
-            try:
-                with st.spinner("Escribiendo y unificando el archivo maestro..."):
-                    df_c = pd.read_excel(file_cabezote, header=None)
-                    df_a = pd.read_excel(file_aprendices, header=None)
+        with st.form("form_registro_directo_cabezote"):
+            c1, c2 = st.columns(2)
+            input_ficha = c1.text_input("Número de Ficha (Columna G / Posición 6):", placeholder="Ej: 2613452")
+            input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", placeholder="Ej: CARLOS ENRIQUE")
+            
+            c3, c4 = st.columns(2)
+            input_materia_num = c3.selectbox("Número de Materia (Columna D / Posición 3):", ["1", "2", "3"])
+            input_trimestre = c4.text_input("Trimestre de la formación (Columna AV / Posición 47):", placeholder="Ej: Trimestre 3")
+            
+            input_materia_nombre = st.text_input("Nombre Detallado de la Asignatura (Columna K / Posición 10):", placeholder="Ej: Mantenimiento Correctivo de Sistemas Electromecánicos")
+            
+            boton_agregar_cab = st.form_submit_button("💾 Insertar Fila en Cabezote de Excel", type="primary")
+            
+        if boton_agregar_cab:
+            if input_ficha and input_instructor and input_materia_nombre and input_trimestre:
+                try:
+                    # Crear array con el tamaño suficiente para mapear la posición 47 (AV)
+                    nueva_fila = [""] * 48
+                    nueva_fila[3] = str(input_materia_num).strip()
+                    nueva_fila[5] = str(input_instructor).strip().upper()
+                    nueva_fila[6] = str(input_ficha).strip()
+                    nueva_fila[10] = str(input_materia_nombre).strip()
+                    nueva_fila[47] = str(input_trimestre).strip()
                     
-                    # Escritura multi-hoja en la ruta local del proyecto
+                    df_nueva_fila = pd.DataFrame([nueva_fila])
+                    
+                    # Cargar datos antiguos de ambas hojas para no sobreescribir lo que ya existe
+                    df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
+                    df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
+                    
+                    # Unir la fila nueva con el histórico de Cabezote
+                    df_cab_final = pd.concat([df_cab_existente, df_nueva_fila], ignore_index=True)
+                    
+                    # Guardar preservando ambas hojas intactas
                     with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
-                        df_c.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
-                        df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                        df_cab_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+                        if not df_apr_existente.empty:
+                            df_apr_existente.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                        else:
+                            # Si no había hoja de aprendices, crear una vacía para mantener la compatibilidad estructural
+                            pd.DataFrame().to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                            
+                    st.success("¡Registro insertado con éxito en el archivo maestro de Excel!")
+                    st.button("🔄 Refrescar interfaz", on_click=st.rerun)
+                except Exception as e:
+                    st.error(f"Error al escribir de forma directa en el archivo Excel: {e}")
+            else:
+                st.warning("Por favor rellene todos los campos solicitados para estructurar la fila correctamente.")
+                
+        # Mostrar vista previa de lo que contiene el Cabezote actual
+        if os.path.exists(DB_FILE):
+            try:
+                st.markdown("### 📋 Vista Previa del Cabezote Guardado Real:")
+                df_preview = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
+                if df_preview.shape[1] > 47:
+                    df_resumen = pd.DataFrame({
+                        "Ficha": df_preview[6],
+                        "Instructor": df_preview[5],
+                        "Materia Num": df_preview[3],
+                        "Asignatura": df_preview[10],
+                        "Trimestre": df_preview[47]
+                    }).dropna(subset=["Ficha", "Instructor"], how="all")
+                    st.dataframe(df_resumen, use_container_width=True)
+            except Exception:
+                pass
+
+    elif opcion_mode == "📁 Subir Archivos Completos (.xlsx)":
+        st.markdown("Sube las hojas de cálculo por separado para realizar un empaquetado general desde cero.")
+        col_up1, col_up2 = st.columns(2)
+        with col_up1:
+            st.subheader("1. Hoja Cabezote")
+            file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"], key="up_cab_v2")
+        with col_up2:
+            st.subheader("2. Hoja Listado de Aprendices")
+            file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"], key="up_apr_v2")
+            
+        if st.button("🧩 Procesar e Integrar Base de Datos Maestro", type="primary"):
+            if file_cabezote is not None and file_aprendices is not None:
+                try:
+                    with st.spinner("Unificando el archivo maestro..."):
+                        df_c = pd.read_excel(file_cabezote, header=None)
+                        df_a = pd.read_excel(file_aprendices, header=None)
                         
-                st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado y guardado correctamente.")
-                st.info("La aplicación se recargará automáticamente para aplicar las nuevas listas.")
-                st.button("🔄 Refrescar datos ahora", on_click=st.rerun)
-            except Exception as e:
-                st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
-        else:
-            st.warning("Por favor cargue ambos archivos (Cabezote y Aprendices) antes de procesar.")
-        
+                        with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
+                            df_c.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+                            df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                            
+                    st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado correctamente.")
+                    st.button("🔄 Re
