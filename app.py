@@ -432,7 +432,7 @@ with tab4:
                         "Grupo": df_preview[6],
                         "Instructor": df_preview[5],
                         "Número Asignación": df_preview[3],
-                        "Asignatura": df_preview[10],
+                        "Resultados de Aprendizaje": df_preview[10],
                         "Trimestre": df_preview[47]
                     }).dropna(subset=["Grupo", "Instructor"], how="all")
                     st.dataframe(df_resumen, use_container_width=True)
