@@ -336,7 +336,7 @@ with tab4:
         with st.form("form_registro_directo_cabezote"):
             c1, c2 = st.columns(2)
             input_grupo = c1.text_input("Número de Grupo:")
-            input_instructor = c2.text_input("Nombre del Instructor:", value=instructor_seleccionado)
+            input_instructor = c2.text_input("Nombre del Instructor:", value=instructor_seleccionado, disabled=True)
             c3, c4 = st.columns(2)
             input_asignacion_num = c3.selectbox("Número de asignación:", ["1", "2", "3"])
             input_trimestre = c4.text_input("Trimestre de la formación:")
