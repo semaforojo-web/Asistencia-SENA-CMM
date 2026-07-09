@@ -9,7 +9,7 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 
 # Nombre del archivo original de Excel en tu repositorio de GitHub
 DB_FILE = "Reporte de Asistencia.xlsx"
-REPO_NAME = "semaforojo-web/asistencia-sena-cmm"  # 👈 CAMBIA ESTO por tu usuario y repositorio real
+REPO_NAME = "semaforojo-web/asistencia-sena-cmm"  # 👈 Configurado correctamente
 
 # ==========================================
 # FUNCIÓN DE LOGICA PERSISTENTE EN GITHUB
@@ -119,10 +119,11 @@ def obtener_trimestres_disponibles(grupo, instructor):
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
-            df_cab[5] = df_cab[5].astype(str).str.strip().str.upper()
+            df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
             
-            filtro = (df_cab[6] == str(grupo)) & (df_cab[5] == str(instructor).upper())
+            # Comparamos ignorando mayúsculas/minúsculas solo para el filtro visual temporal
+            filtro = (df_cab[6] == str(grupo)) & (df_cab[5].str.upper() == str(instructor).strip().upper())
             resultado = df_cab[filtro]
             
             if not resultado.empty and resultado.shape[1] > 47:
@@ -139,12 +140,12 @@ def obtener_materias_disponibles(grupo, instructor, trimestre):
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
-            df_cab[5] = df_cab[5].astype(str).str.strip().str.upper()
+            df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
             df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
             
             filtro = (df_cab[6] == str(grupo)) & \
-                     (df_cab[5] == str(instructor).upper()) & \
+                     (df_cab[5].str.upper() == str(instructor).strip().upper()) & \
                      (df_cab[47] == str(trimestre))
             resultado = df_cab[filtro]
             
@@ -163,12 +164,12 @@ def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
             df_cab[3] = df_cab[3].astype(str).str.strip()
-            df_cab[5] = df_cab[5].astype(str).str.strip().str.upper()
+            df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
             df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
             
             filtro = (df_cab[6] == str(grupo)) & \
-                     (df_cab[5] == str(instructor).upper()) & \
+                     (df_cab[5].str.upper() == str(instructor).strip().upper()) & \
                      (df_cab[47] == str(trimestre)) & \
                      (df_cab[3] == str(asignacion_num))
                      
@@ -329,7 +330,7 @@ with tab3:
 
 # PESTAÑA 4: GESTIÓN DE BASES DE DATOS (CON CONEXIÓN DIRECTA A GITHUB)
 with tab4:
-    st.header("📂 Gestión y Alimentación de la Base de Datos de la G a la AV")
+    st.header("📂 Gestión y Alimentación de la Base de Datos")
     opcion_carga = st.radio("Seleccione el método para gestionar datos:", ["✍️ Alimentar Cabezote Directamente (Formulario)", "📁 Subir Archivos Completos (.xlsx)"])
     
     if opcion_carga == "✍️ Alimentar Cabezote Directamente (Formulario)":
@@ -337,7 +338,7 @@ with tab4:
             # Fila 1: Datos Base (A, F, G, D)
             c1, c2, c3, c4 = st.columns(4)
             input_grupo = c1.text_input("Número de Grupo (Columna G / Posición 6):", placeholder="Ej: 3141501")
-            input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", value=instructor_seleccionado)
+            input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", value=instructor_seleccionado, disabled=True) # 👈 Bloqueado para evitar errores
             input_asignacion_num = c3.selectbox("Número de asignación (Columna D / Posición 3):", ["1", "2", "3"])
             input_materia_nombre = c4.text_input("Resultados de Aprendizaje (Columna K / Posición 10):", placeholder="Ej: Mantenimiento")
             
@@ -364,7 +365,7 @@ with tab4:
             input_jornada = c15.text_input("Jornada (Columna T / Posición 19):")
             
             # Fila 5: Evidencias
-            st.markdown("##### 📑 Evidencias del Proceso (1 al 5)")
+            st.markdown("##### ##### 📑 Evidencias del Proceso (1 al 5)")
             col_ev1, col_ev2, col_ev3, col_ev4, col_ev5 = st.columns(5)
             input_ev1 = col_ev1.text_input("Evidencia 1 (Pos 20):")
             input_ev2 = col_ev2.text_input("Evidencia 2 (Pos 21):")
@@ -418,17 +419,17 @@ with tab4:
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
             
         if boton_agregar_cab:
-            if input_grupo and input_instructor and input_resultados and input_trimestre:
-                if input_grupo and input_instructor and input_trimestre:
+            if input_grupo and input_instructor and input_trimestre: # 👈 Corregido el error de validación doble
                 try:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
+                    df_inst_existente = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None) if os.path.exists(DB_FILE) else pd.DataFrame() # 👈 Corregido: Cargada la base de instructores faltante
                     
                     ancho_columnas = 49
                     nueva_fila = [""] * ancho_columnas
                     
                     nueva_fila[3] = str(input_asignacion_num).strip()          # Columna D
-                    nueva_fila[5] = str(input_instructor).strip().upper()       # Columna F
+                    nueva_fila[5] = str(input_instructor).strip()              # 👈 ¡Corregido! Respeta mayúsculas y minúsculas exactas
                     nueva_fila[6] = str(input_grupo).strip()                    # Columna G (GRUPO)
                     nueva_fila[7] = str(input_fase).strip()                     # Columna H (Fase)
                     nueva_fila[8] = str(input_actividades).strip()              # Columna I (Actividades)
@@ -478,12 +479,11 @@ with tab4:
                     
                     df_cab_final = pd.concat([df_cab_existente, pd.DataFrame([nueva_fila])], ignore_index=True)
                     
-                    # Llamamos a la sincronización en lugar de guardar local únicamente
+                    # Llamamos a la sincronización
                     guardar_y_sincronizar_a_github(df_cab_final, df_apr_existente, df_inst_existente)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al escribir en el archivo: {e}")
-
     elif opcion_carga == "📁 Subir Archivos Completos (.xlsx)":
         file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"])
         file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"])
