@@ -35,7 +35,7 @@ def cargar_datos():
         except Exception as e:
             st.error(f"Error al filtrar listado de aprendices: {e}")
             
-    data = {"Ficha": ["Sin Datos"], "Documento": ["0"], "Nombre Completo": ["ARCHIVO EXCEL NO DETECTADO"]}
+    data = {"Ficha": ["Error"], "Documento": ["0"], "Nombre Completo": ["ARCHIVO EXCEL NO DETECTADO"]}
     return pd.DataFrame(data)
 
 def obtener_parametros_cabezote():
@@ -49,27 +49,74 @@ def obtener_parametros_cabezote():
             pass
     return ["No Detectado"]
 
-def filtrar_materia_cabezote(ficha, instructor, materia_num):
+def obtener_trimestres_disponibles(ficha, instructor):
+    """Busca qué trimestres reales (AV - Columna 47) existen para una ficha e instructor específicos"""
+    if os.path.exists(DB_FILE):
+        try:
+            df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
+            df_cab[5] = df_cab[5].astype(str).str.strip().str.upper()
+            df_cab[6] = df_cab[6].astype(str).str.strip()
+            
+            filtro = (df_cab[6] == str(ficha)) & (df_cab[5] == str(instructor).upper())
+            resultado = df_cab[filtro]
+            
+            if not resultado.empty and resultado.shape[1] > 47:
+                trimestres = resultado.iloc[:, 47].dropna().astype(str).str.strip().unique().tolist()
+                trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() != "NAN" and t.upper() != "TRIMESTRE"])
+                if trimestres_validos:
+                    return trimestres_validos
+        except Exception:
+            pass
+    return ["Sin trimestres detectados"]
+
+def obtener_materias_disponibles(ficha, instructor, trimestre):
+    """Busca qué números de materia (D - Columna 3) existen con los filtros previos"""
+    if os.path.exists(DB_FILE):
+        try:
+            df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
+            df_cab[5] = df_cab[5].astype(str).str.strip().str.upper()
+            df_cab[6] = df_cab[6].astype(str).str.strip()
+            df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
+            
+            filtro = (df_cab[6] == str(ficha)) & \
+                     (df_cab[5] == str(instructor).upper()) & \
+                     (df_cab[47] == str(trimestre))
+            resultado = df_cab[filtro]
+            
+            if not resultado.empty:
+                materias = resultado.iloc[:, 3].dropna().astype(str).str.strip().unique().tolist()
+                materias_validas = sorted([m for m in materias if m != "" and m.upper() != "MATERIA" and m.upper() != "NAN"])
+                if materias_validas:
+                    return materias_validas
+        except Exception:
+            pass
+    return ["1", "2", "3"]
+
+def filtrar_materia_final(ficha, instructor, trimestre, materia_num):
+    """Filtra de manera estricta por los 4 parámetros simultáneos en Cabezote"""
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
             df_cab[3] = df_cab[3].astype(str).str.strip()
             df_cab[5] = df_cab[5].astype(str).str.strip().str.upper()
             df_cab[6] = df_cab[6].astype(str).str.strip()
+            df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
             
             filtro = (df_cab[6] == str(ficha)) & \
                      (df_cab[5] == str(instructor).upper()) & \
+                     (df_cab[47] == str(trimestre)) & \
                      (df_cab[3] == str(materia_num))
                      
             resultado = df_cab[filtro]
             
             if not resultado.empty:
+                # Columna K (Materia/Resultado) -> Posición 10
                 materia_texto = resultado.iloc[0, 10] if resultado.shape[1] > 10 else resultado.iloc[0, 3]
                 if pd.notna(materia_texto) and str(materia_texto).strip() != "":
                     return str(materia_texto).strip()
-            return f"Materia {materia_num} (Sin descripción detallada en Cabezote)"
+            return f"Materia {materia_num} (Sin descripción en Cabezote)"
         except Exception as e:
-            return f"Error leyendo Cabezote: {e}"
+            return f"Error: {e}"
     return "Archivo Excel no encontrado"
 
 # --- EJECUCIÓN PRINCIPAL ---
@@ -77,21 +124,23 @@ df_aprendices = cargar_datos()
 lista_instructores = obtener_parametros_cabezote()
 
 if not os.path.exists("asistencia_guardada.csv"):
-    pd.DataFrame(columns=["Fecha", "Ficha", "Instructor", "Materia_Num", "Materia_Nombre", "Documento", "Nombre", "Asistencia"]).to_csv("asistencia_guardada.csv", index=False)
-
-if not os.path.exists("evaluaciones_guardadas.csv"):
-    pd.DataFrame(columns=["Fecha", "Ficha", "Instructor", "Materia", "Documento", "Nombre", "Evaluación (A/D)", "Observaciones"]).to_csv("evaluaciones_guardadas.csv", index=False)
+    pd.DataFrame(columns=["Fecha", "Ficha", "Instructor", "Trimestre", "Materia_Num", "Materia_Nombre", "Documento", "Nombre", "Asistencia"]).to_csv("asistencia_guardada.csv", index=False)
 
 # --- INTERFAZ SIDEBAR ---
 st.title("📊 Dashboard de Gestión de Ambientes de Formación - SENA")
 st.sidebar.header("⚙️ Filtros de Planificación")
 
 lista_fichas = sorted(df_aprendices["Ficha"].dropna().unique())
-ficha_seleccionada = st.sidebar.selectbox("1. Seleccione la Ficha:", lista_fichas)
-instructor_seleccionado = st.sidebar.selectbox("2. Seleccione el Instructor:", lista_instructores)
-materia_num_seleccionada = st.sidebar.selectbox("3. Seleccione Materia:", ["1", "2", "3"])
+ficha_seleccionada = st.sidebar.selectbox("1. Seleccione la Ficha (Columna G):", lista_fichas if lista_fichas else ["Error"])
+instructor_seleccionado = st.sidebar.selectbox("2. Seleccione el Instructor (Columna F):", lista_instructores)
 
-materia_detectada = filtrar_materia_cabezote(ficha_seleccionada, instructor_seleccionado, materia_num_seleccionada)
+lista_trimestres_dinamicos = obtener_trimestres_disponibles(ficha_seleccionada, instructor_seleccionado)
+trimestre_seleccionado = st.sidebar.selectbox("3. Seleccione el Trimestre (Columna AV):", lista_trimestres_dinamicos)
+
+lista_materias_dinamicas = obtener_materias_disponibles(ficha_seleccionada, instructor_seleccionado, trimestre_seleccionado)
+materia_num_seleccionada = st.sidebar.selectbox("4. Seleccione Materia (Columna D):", lista_materias_dinamicas)
+
+materia_detectada = filtrar_materia_final(ficha_seleccionada, instructor_seleccionado, trimestre_seleccionado, materia_num_seleccionada)
 
 st.sidebar.markdown("---")
 st.sidebar.info(f"📚 **Materia Vinculada:**\n{materia_detectada}")
@@ -99,18 +148,18 @@ st.sidebar.info(f"📚 **Materia Vinculada:**\n{materia_detectada}")
 alumnos_ficha = df_aprendices[df_aprendices["Ficha"] == ficha_seleccionada].reset_index(drop=True)
 st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_ficha)}")
 
-# --- PESTAÑAS DE LA APLICACIÓN ---
-tab1, tab2, tab3 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes"])
+# --- PESTAÑAS DE LA APLICACIÓN (Se añade la cuarta pestaña) ---
+tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Cargar y Actualizar Bases"])
 
 # PESTAÑA 1: LLAMADO A LISTA
 with tab1:
     st.header(f"📋 Control de Asistencia")
-    st.subheader(f"Ficha: {ficha_seleccionada} | Instructor: {instructor_seleccionado}")
-    st.caption(f"📖 Asignatura activa: {materia_detectada}")
+    st.subheader(f"Ficha: {ficha_seleccionada} | Trimestre: {trimestre_seleccionado}")
+    st.caption(f"📖 Asignatura: {materia_detectada} (Materia {materia_num_seleccionada})")
     
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
     
-    if alumnos_ficha.empty or ficha_seleccionada == "Sin Datos":
+    if alumnos_ficha.empty or ficha_seleccionada == "Error":
         st.warning(f"No hay aprendices activos asignados a la ficha seleccionada.")
     else:
         with st.form(key=f"formulario_asistencia_{ficha_seleccionada}"):
@@ -140,6 +189,7 @@ with tab1:
                     "Fecha": fecha_asistencia,
                     "Ficha": ficha_seleccionada,
                     "Instructor": instructor_seleccionado,
+                    "Trimestre": trimestre_seleccionado,
                     "Materia_Num": materia_num_seleccionada,
                     "Materia_Nombre": materia_detectada,
                     "Documento": row["Documento"],
@@ -148,16 +198,18 @@ with tab1:
                 })
             
             df_nuevo = pd.DataFrame(registros)
-            df_nuevo.to_csv("asistencia_guardada.csv", mode='a', header=False, index=False)
+            file_exists = os.path.exists("asistencia_guardada.csv")
+            df_nuevo.to_csv("asistencia_guardada.csv", mode='a', header=not file_exists, index=False)
             st.success(f"¡Asistencia de '{materia_detectada}' guardada exitosamente!")
+            st.rerun()
 
 # PESTAÑA 2: EVALUACIÓN
 with tab2:
     st.header(f"📝 Registro de Juicios Evaluativos")
-    st.markdown(f"**Ficha:** {ficha_seleccionada} | **Evaluación para:** {materia_detectada}")
+    st.markdown(f"**Ficha:** {ficha_seleccionada} | **Trimestre:** {trimestre_seleccionado} | **Materia {materia_num_seleccionada}:** {materia_detectada}")
     fecha_evaluacion = st.date_input("Fecha de Evaluación:", datetime.now())
     
-    if alumnos_ficha.empty or ficha_seleccionada == "Sin Datos":
+    if alumnos_ficha.empty or ficha_seleccionada == "Error":
         st.warning("No hay alumnos para evaluar.")
     else:
         with st.form(key=f"formulario_evaluacion_{ficha_seleccionada}"):
@@ -185,6 +237,7 @@ with tab2:
                     "Fecha": fecha_evaluacion,
                     "Ficha": ficha_seleccionada,
                     "Instructor": instructor_seleccionado,
+                    "Trimestre": trimestre_seleccionado,
                     "Materia": materia_detectada,
                     "Documento": row["Documento"],
                     "Nombre": row["Nombre Completo"],
@@ -207,17 +260,42 @@ with tab3:
                 st.dataframe(df_filtrado_asist, use_container_width=True)
             else:
                 st.info("No hay registros de asistencia para esta ficha.")
+
+# NUEVA PESTAÑA 4: GESTIÓN Y CARGA DE BASES DE EXCEL
+with tab4:
+    st.header("📂 Carga de Archivos de Configuración")
+    st.markdown("Desde esta sección puedes estructurar y unificar el archivo maestro de datos (`Reporte de Asistencia.xlsx`) subiendo los archivos correspondientes.")
+    
+    col_up1, col_up2 = st.columns(2)
+    
+    with col_up1:
+        st.subheader("1. Hoja Cabezote")
+        file_cabezote = st.file_uploader("Subir archivo para Cabezote (.xlsx)", type=["xlsx"], key="up_cab")
+        
+    with col_up2:
+        st.subheader("2. Hoja Listado de Aprendices")
+        file_aprendices = st.file_uploader("Subir archivo para Aprendices (.xlsx)", type=["xlsx"], key="up_apr")
+        
+    st.markdown("---")
+    
+    # Botón para unificar y procesar la información
+    if st.button("🧩 Procesar e Integrar Base de Datos Maestro", type="primary"):
+        if file_cabezote is not None and file_aprendices is not None:
+            try:
+                with st.spinner("Escribiendo y unificando el archivo maestro..."):
+                    df_c = pd.read_excel(file_cabezote, header=None)
+                    df_a = pd.read_excel(file_aprendices, header=None)
+                    
+                    # Escritura multi-hoja en la ruta local del proyecto
+                    with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
+                        df_c.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+                        df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+                        
+                st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado y guardado correctamente.")
+                st.info("La aplicación se recargará automáticamente para aplicar las nuevas listas.")
+                st.button("🔄 Refrescar datos ahora", on_click=st.rerun)
+            except Exception as e:
+                st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
         else:
-            st.info("No se han encontrado registros históricos de asistencia.")
-            
-    with sub_tab2:
-        if os.path.exists("evaluaciones_guardadas.csv"):
-            df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
-            df_filtrado_eval = df_eval_hist[df_eval_hist["Ficha"].astype(str) == str(ficha_seleccionada)]
-            if not df_filtrado_eval.empty:
-                st.dataframe(df_filtrado_eval, use_container_width=True)
-            else:
-                st.info("No hay registros de evaluaciones para esta ficha.")
-        else:
-            st.info("No se han encontrado registros históricos de evaluaciones.")
+            st.warning("Por favor cargue ambos archivos (Cabezote y Aprendices) antes de procesar.")
         
