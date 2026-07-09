@@ -304,7 +304,7 @@ with tab4:
             input_grupo = c1.text_input("Número de Grupo (Columna G / Posición 6):", placeholder="Ej: 3141501")
             input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", value=instructor_seleccionado)
             input_asignacion_num = c3.selectbox("Número de asignación (Columna D / Posición 3):", ["1", "2", "3"])
-            input_materia_nombre = c4.text_input("Nombre de la Asignatura (Columna K / Posición 10):", placeholder="Ej: Mantenimiento")
+            input_materia_nombre = c4.text_input("Resultados de Aprendizaje (Columna K / Posición 10):", placeholder="Ej: Mantenimiento")
             
             # Fila 2: Información del Proyecto
             st.markdown("##### 🚀 Planificación Estratégica del Proyecto")
