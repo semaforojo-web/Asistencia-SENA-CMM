@@ -419,6 +419,7 @@ with tab4:
             
         if boton_agregar_cab:
             if input_grupo and input_instructor and input_resultados and input_trimestre:
+                if input_grupo and input_instructor and input_trimestre:
                 try:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
