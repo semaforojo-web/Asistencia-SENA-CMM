@@ -447,6 +447,8 @@ with tab4:
                     st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado correctamente.")
                     st.rerun()
                 except Exception as e:
+                    st.rerun()
+                except Exception as e:
                     st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
-                    else:
+            else:
                 st.warning("Por favor cargue ambos archivos antes de procesar.")
