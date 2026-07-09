@@ -222,7 +222,7 @@ df_aprendices = cargar_datos()
 instructor_seleccionado = st.session_state["instructor_logueado"]
 
 if not os.path.exists("asistencia_guardada.csv"):
-    pd.DataFrame(columns=["Fecha", "Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Materia_Nombre", "Documento", "Nombre", "Asistencia"]).to_csv("asistencia_guardada.csv", index=False)
+    pd.DataFrame(columns=["Fecha", "Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Resultados", "Documento", "Nombre", "Asistencia"]).to_csv("asistencia_guardada.csv", index=False)
 
 if not os.path.exists("evaluaciones_guardadas.csv"):
     pd.DataFrame(columns=["Fecha", "Grupo", "Instructor", "Trimestre", "Materia", "Documento", "Nombre", "Evaluación (A/D)", "Observaciones"]).to_csv("evaluaciones_guardadas.csv", index=False)
@@ -281,7 +281,7 @@ with tab1:
                 registros.append({
                     "Fecha": fecha_asistencia, "Grupo": grupo_seleccionado, "Instructor": instructor_seleccionado,
                     "Trimestre": trimestre_seleccionado, "Asignacion_Num": asignacion_num_seleccionada,
-                    "Materia_Nombre": materia_detectada, "Documento": row["Documento"], "Nombre": row["Nombre Completo"], "Asistencia": estado
+                    "Resultados": materia_detectada, "Documento": row["Documento"], "Nombre": row["Nombre Completo"], "Asistencia": estado
                 })
             pd.DataFrame(registros).to_csv("asistencia_guardada.csv", mode='a', header=False, index=False)
             st.success("¡Asistencia guardada localmente!")
@@ -294,7 +294,7 @@ with tab2:
     if alumnos_grupo.empty or grupo_seleccionado == "Error":
         st.warning("No hay alumnos para evaluar.")
     else:
-        with st.form(key=f"formulario_evaluacion_{grupo_seleccionado}"):
+        with st.form(key=f"formulario_evaluacion_{grupseleccionado}"):
             eval_dict, obs_dict = {}, {}
             for idx, row in alumnos_grupo.iterrows():
                 c1, c2, c3 = st.columns([4, 2, 4])
@@ -340,11 +340,11 @@ with tab4:
             c3, c4 = st.columns(2)
             input_asignacion_num = c3.selectbox("Número de asignación:", ["1", "2", "3"])
             input_trimestre = c4.text_input("Trimestre de la formación:")
-            input_materia_nombre = st.text_input("Resulados de Aprendizaje:")
+            input_resultados = st.text_input("Resulados de Aprendizaje:")
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
             
         if boton_agregar_cab:
-            if input_grupo and input_instructor and input_materia_nombre and input_trimestre:
+            if input_grupo and input_instructor and input_resultados and input_trimestre:
                 try:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
@@ -355,7 +355,7 @@ with tab4:
                     nueva_fila[3] = str(input_asignacion_num).strip()
                     nueva_fila[5] = str(input_instructor).strip()
                     nueva_fila[6] = str(input_grupo).strip()
-                    nueva_fila[10] = str(input_materia_nombre).strip()
+                    nueva_fila[10] = str(input_resultados).strip()
                     nueva_fila[47] = str(input_trimestre).strip()
                     
                     df_cab_final = pd.concat([df_cab_existente, pd.DataFrame([nueva_fila])], ignore_index=True)
