@@ -294,7 +294,7 @@ with tab2:
     if alumnos_grupo.empty or grupo_seleccionado == "Error":
         st.warning("No hay alumnos para evaluar.")
     else:
-        with st.form(key=f"formulario_evaluacion_{grupseleccionado}"):
+        with st.form(key=f"formulario_evaluacion_{grupo_seleccionado}"):
             eval_dict, obs_dict = {}, {}
             for idx, row in alumnos_grupo.iterrows():
                 c1, c2, c3 = st.columns([4, 2, 4])
