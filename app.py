@@ -93,7 +93,7 @@ def obtener_trimestres_disponibles(grupo, instructor):
     return ["Sin trimestres detectados"]
 
 def obtener_materias_disponibles(grupo, instructor, trimestre):
-    """Obtiene los números de asignación (materia) cargados para la combinación seleccionada"""
+    """Obtiene los números de asignación cargados para la combinación seleccionada"""
     if os.path.exists(DB_FILE):
         try:
             df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
@@ -182,7 +182,7 @@ if not st.session_state["autenticado"]:
 df_aprendices = cargar_datos()
 instructor_seleccionado = st.session_state["instructor_logueado"]
 
-# Creación de históricos locales si no existen
+# Creación de históricos locales si no existen (Ya estructurados con Grupo y Asignacion_Num)
 if not os.path.exists("asistencia_guardada.csv"):
     pd.DataFrame(columns=["Fecha", "Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Materia_Nombre", "Documento", "Nombre", "Asistencia"]).to_csv("asistencia_guardada.csv", index=False)
 
@@ -318,7 +318,7 @@ with tab2:
             pd.DataFrame(registros_eval).to_csv("evaluaciones_guardadas.csv", mode='a', header=False, index=False)
             st.success("Evaluaciones guardadas con éxito.")
 
-# PESTAÑA 3: REPORTES CONSOLIDADOS
+# PESTAÑA 3: REPORTES CONSOLIDADOS (BLINDADA CONTRA EL KEYERROR)
 with tab3:
     st.header("📈 Historial de Registros")
     sub_tab1, sub_tab2 = st.tabs(["Histórico de Asistencias", "Histórico de Notas"])
@@ -326,20 +326,36 @@ with tab3:
     with sub_tab1:
         if os.path.exists("asistencia_guardada.csv"):
             df_asist_hist = pd.read_csv("asistencia_guardada.csv")
-            df_filtrado_asist = df_asist_hist[(df_asist_hist["Grupo"].astype(str) == str(grupo_seleccionado)) & (df_asist_hist["Instructor"].astype(str).str.upper() == str(instructor_seleccionado).upper())]
-            if not df_filtrado_asist.empty:
-                st.dataframe(df_filtrado_asist, use_container_width=True)
+            
+            # Si el archivo viejo existe y contiene "Ficha", lo renombramos sobre la marcha para que no falle
+            if "Ficha" in df_asist_hist.columns:
+                df_asist_hist = df_asist_hist.rename(columns={"Ficha": "Grupo", "Materia_Num": "Asignacion_Num"})
+            
+            if "Grupo" in df_asist_hist.columns:
+                df_filtrado_asist = df_asist_hist[(df_asist_hist["Grupo"].astype(str) == str(grupo_seleccionado)) & (df_asist_hist["Instructor"].astype(str).str.upper() == str(instructor_seleccionado).upper())]
+                if not df_filtrado_asist.empty:
+                    st.dataframe(df_filtrado_asist, use_container_width=True)
+                else:
+                    st.info("No hay registros de asistencia guardados por usted para este grupo.")
             else:
-                st.info("No hay registros de asistencia guardados por usted para esta ficha/grupo.")
+                st.info("Estructura de archivo no reconocida.")
                 
     with sub_tab2:
         if os.path.exists("evaluaciones_guardadas.csv"):
             df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
-            df_filtrado_eval = df_eval_hist[(df_eval_hist["Grupo"].astype(str) == str(grupo_seleccionado)) & (df_eval_hist["Instructor"].astype(str).str.upper() == str(instructor_seleccionado).upper())]
-            if not df_filtrado_eval.empty:
-                st.dataframe(df_filtrado_eval, use_container_width=True)
+            
+            # Lo mismo para evaluaciones
+            if "Ficha" in df_eval_hist.columns:
+                df_eval_hist = df_eval_hist.rename(columns={"Ficha": "Grupo"})
+                
+            if "Grupo" in df_eval_hist.columns:
+                df_filtrado_eval = df_eval_hist[(df_eval_hist["Grupo"].astype(str) == str(grupo_seleccionado)) & (df_eval_hist["Instructor"].astype(str).str.upper() == str(instructor_seleccionado).upper())]
+                if not df_filtrado_eval.empty:
+                    st.dataframe(df_filtrado_eval, use_container_width=True)
+                else:
+                    st.info("No hay registros de evaluaciones guardados por usted para este grupo.")
             else:
-                st.info("No hay registros de evaluaciones guardados por usted para esta ficha/grupo.")
+                st.info("Estructura de archivo no reconocida.")
 
 # PESTAÑA 4: GESTIÓN DE BASES DE DATOS
 with tab4:
@@ -445,8 +461,6 @@ with tab4:
                             df_a.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
                             
                     st.success(f"¡Excelente! El archivo maestro `{DB_FILE}` ha sido configurado correctamente.")
-                    st.rerun()
-                except Exception as e:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Ocurrió un error al empaquetar el archivo: {e}")
