@@ -438,7 +438,7 @@ with tab4:
                     nueva_fila[11] = str(input_li).strip()                      # Columna L (RA)
                     nueva_fila[12] = str(input_horas).strip()                   # Columna M (Línea)
                     nueva_fila[13] = str(input_fecha_ini).strip()                   # Columna N (Horas)
-                    nueva_fila[14] = str(input_fecha_tri).strip()               # Columna O (Fecha inicio)
+                    nueva_fila[14] = str(input_tri).strip()               # Columna O (Fecha inicio)
                     nueva_fila[15] = str(input_ambiente).strip()                # Columna Q (Ambiente)
                     nueva_fila[16] = str(input_dia).strip()                     # Columna R (Día)
                     nueva_fila[17] = str(input_horario).strip()                 # Columna S (Horario)
