@@ -340,7 +340,7 @@ with tab4:
             input_grupo = c1.text_input("Número de Grupo (Columna G / Posición 6):", placeholder="Ej: 3141501")
             input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", value=instructor_seleccionado, disabled=True) # 👈 Bloqueado para evitar errores
             input_asignacion_num = c3.selectbox("Número de asignación (Columna D / Posición 3):", ["1", "2", "3"])
-            input_materia_nombre = c4.text_input("Resultados de Aprendizaje (Columna K / Posición 10):", placeholder="Ej: Mantenimiento")
+            input_resultados = c4.text_input("Resultados de Aprendizaje (Columna K / Posición 10):", placeholder="Ej: Mantenimiento")
             
             # Fila 2: Información del Proyecto
             st.markdown("##### 🚀 Planificación Estratégica del Proyecto")
@@ -351,18 +351,18 @@ with tab4:
             
             # Fila 3: Resultados, Horas y Tiempos
             c8, c9, c10, c11 = st.columns([3, 1, 1, 1])
-            input_ra = c8.text_input("Resultado de Aprendizaje (Columna L / Posición 11):")
-            input_linea = c9.text_input("Línea (Columna M / Posición 12):")
-            input_horas = c10.text_input("Número de Horas (Columna N / Posición 13):")
-            input_fecha_ini = c11.text_input("Fecha de inicio (Columna O / Posición 14):", placeholder="DD/MM/AAAA")
+            input_li = c8.text_input("Linea (Columna L / Posición 11):")
+            input_tri = c9.text_input("Trimestre rep (Columna O / Posición 14):")
+            input_horas = c10.text_input("Número de Horas (Columna M / Posición 12):")
+            input_fecha_ini = c11.text_input("Fecha de inicio (Columna N / Posición 13):", placeholder="DD/MM/AAAA")
             
             # Fila 4: Ambientes y Horarios
             st.markdown("##### 🏫 Datos Locales del Ambiente y Jornada")
             c12, c13, c14, c15 = st.columns(4)
-            input_ambiente = c12.text_input("Ambiente (Columna Q / Posición 15):")
-            input_dia = c13.text_input("Día (Columna R / Posición 16):")
-            input_horario = c14.text_input("Horario (Columna S / Posición 17):")
-            input_jornada = c15.text_input("Jornada (Columna T / Posición 18):")
+            input_ambiente = c12.text_input("Ambiente (Columna P / Posición 15):")
+            input_dia = c13.text_input("Día (Columna Q / Posición 16):")
+            input_horario = c14.text_input("Horario (Columna R / Posición 17):")
+            input_jornada = c15.text_input("Jornada (Columna S / Posición 18):")
             
             # Fila 5: Evidencias
             st.markdown("##### ##### 📑 Evidencias del Proceso (1 al 5)")
@@ -413,8 +413,8 @@ with tab4:
                 
                 st.markdown("---")
                 c_f1, c_f2 = st.columns(2)
-                input_trimestre = c_f1.text_input("Trimestre reportado (Columna AV / Posición 47):", placeholder="Ej: Trimestre 1")
-                input_observaciones = c_f2.text_input("Observaciones (Columna AW / Posición 48):")
+                input_trimestre = c_f1.text_input("Trimestre en curso (Columna AV / Posición 47):", placeholder="Ej: Trimestre 1")
+                input_observaciones = c_f2.text_input("Observaciones (Columna AW / Posición 46):")
             
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
             
@@ -434,11 +434,11 @@ with tab4:
                     nueva_fila[7] = str(input_fase).strip()                     # Columna H (Fase)
                     nueva_fila[8] = str(input_actividades).strip()              # Columna I (Actividades)
                     nueva_fila[9] = str(input_competencia).strip()              # Columna J (Competencia)
-                    nueva_fila[10] = str(input_materia_nombre).strip()          # Columna K
-                    nueva_fila[11] = str(input_ra).strip()                      # Columna L (RA)
-                    nueva_fila[12] = str(input_linea).strip()                   # Columna M (Línea)
-                    nueva_fila[13] = str(input_horas).strip()                   # Columna N (Horas)
-                    nueva_fila[14] = str(input_fecha_ini).strip()               # Columna O (Fecha inicio)
+                    nueva_fila[10] = str(input_resultados).strip()          # Columna K
+                    nueva_fila[11] = str(input_li).strip()                      # Columna L (RA)
+                    nueva_fila[12] = str(input_horas).strip()                   # Columna M (Línea)
+                    nueva_fila[13] = str(input_fecha_ini).strip()                   # Columna N (Horas)
+                    nueva_fila[14] = str(input_fecha_tri).strip()               # Columna O (Fecha inicio)
                     nueva_fila[15] = str(input_ambiente).strip()                # Columna Q (Ambiente)
                     nueva_fila[16] = str(input_dia).strip()                     # Columna R (Día)
                     nueva_fila[17] = str(input_horario).strip()                 # Columna S (Horario)
@@ -474,8 +474,8 @@ with tab4:
                     nueva_fila[44] = str(input_s10).strip()
                     nueva_fila[45] = str(input_s11).strip()
                     
-                    nueva_fila[46] = str(input_trimestre).strip()               # Columna AV (Trimestre)
-                    nueva_fila[47] = str(input_observaciones).strip()           # Columna AW (Observaciones)
+                    nueva_fila[46] = str(input_observaciones).strip()               # Columna AV (Trimestre)
+                    nueva_fila[47] = str(input_trimestre).strip()           # Columna AW (Observaciones)
                     
                     df_cab_final = pd.concat([df_cab_existente, pd.DataFrame([nueva_fila])], ignore_index=True)
                     
