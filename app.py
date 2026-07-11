@@ -118,14 +118,15 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
 def obtener_instructores_y_contraseñas():
-    """Lee los instructores y sus contraseñas desde GitHub de forma segura"""
+    """Lee los instructores y sus contraseñas desde GitHub de forma segura forzando el motor openpyxl"""
     dict_usuarios = {}
     lista_instructores = []
     
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            df_inst = pd.read_excel(archivo_memoria, sheet_name="Listado de instructores", header=None)
+            # Añadimos engine='openpyxl' para garantizar la lectura de bytes binarios
+            df_inst = pd.read_excel(archivo_memoria, sheet_name="Listado de instructores", header=None, engine='openpyxl')
             for idx, row in df_inst.iterrows():
                 nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
                 password = str(row[1]).strip() if df_inst.shape[1] > 1 and pd.notna(row[1]) else "SENA2026"
@@ -134,12 +135,14 @@ def obtener_instructores_y_contraseñas():
                     dict_usuarios[nombre] = password
                     lista_instructores.append(nombre)
                     
-            return sorted(lista_instructores), dict_usuarios
-        except Exception:
-            return ["Falta hoja 'Listado de instructores'"], {}
+            if lista_instructores:
+                return sorted(lista_instructores), dict_usuarios
+            else:
+                return ["La hoja está vacía"], {}
+        except Exception as e:
+            return [f"Error al leer hoja: {e}"], {}
             
-    return ["No Detectado"], {}
-
+    return ["No se pudo conectar a GitHub"], {}
 def cargar_datos():
     """Carga y procesa el listado de aprendices desde GitHub sin usar el disco local"""
     archivo_memoria = descargar_excel_desde_github()
