@@ -555,8 +555,11 @@ with tab4:
                     
                     ancho_columnas = 49
                     nueva_fila = [""] * ancho_columnas
-                    
-                    nueva_fila[3] = str(input_asignacion_num).strip()
+                    if str(input_asignacion_num).strip().isdigit():
+                       nueva_fila[3] = int(input_asignacion_num)
+                    else:
+                       nueva_fila[3] = str(input_asignacion_num).strip()
+            
                     nueva_fila[5] = str(input_instructor).strip()
                     grupo_limpio = str(input_grupo).strip()
                     if grupo_limpio.isdigit():
