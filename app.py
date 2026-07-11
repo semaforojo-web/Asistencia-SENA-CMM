@@ -330,8 +330,26 @@ with tab2:
                     "Trimestre": trimestre_seleccionado, "Materia": materia_detectada, "Documento": row["Documento"],
                     "Nombre": row["Nombre Completo"], "Evaluación (A/D)": eval_dict[idx], "Observaciones": obs_dict[idx]
                 })
-            pd.DataFrame(registros_eval).to_csv("evaluaciones_guardadas.csv", mode='a', header=False, index=False)
-            st.success("Evaluaciones guardadas.")
+            
+            # Guardar localmente
+            df_nuevas_notas = pd.DataFrame(registros_eval)
+            df_nuevas_notas.to_csv("evaluaciones_guardadas.csv", mode='a', header=not os.path.exists("evaluaciones_guardadas.csv"), index=False)
+            
+            # 🔄 RESPALDO AUTOMÁTICO EN GITHUB
+            if "GITHUB_TOKEN" in st.secrets:
+                try:
+                    g = Github(st.secrets["GITHUB_TOKEN"])
+                    repo = g.get_repo(REPO_NAME)
+                    with open("asueluaciones_guardadas.csv", "r", encoding='utf-8') as f:
+                        contenido_notas = f.read()
+                    try:
+                        sha = repo.get_contents("evaluaciones_guardadas.csv", ref="main").sha
+                        repo.update_file("evaluaciones_guardadas.csv", "🤖 Actualizar histórico notas CSV", contenido_notas, sha, branch="main")
+                    except Exception:
+                        repo.create_file("evaluaciones_guardadas.csv", "🤖 Crear histórico notas CSV", contenido_notas, branch="main")
+                    st.success("🔄 ¡Historial de Notas respaldado en GitHub!")
+                except Exception as e:
+                    st.warning(f"Guardado local, pero no se pudo subir a GitHub: {e}")
 
 # PESTAÑA 3: REPORTES
 with tab3:
