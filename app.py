@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 import pandas as pd
 import os
@@ -17,22 +18,27 @@ REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 # FUNCIÓN AUXILIAR: DESCARGAR EXCEL DE GITHUB A MEMORIA
 # ==========================================
 def descargar_excel_desde_github():
-    """Descarga el archivo Excel binario desde GitHub de forma segura en bruto."""
-    if "GITHUB_TOKEN" in st.secrets:
-        try:
-            g = Github(st.secrets["GITHUB_TOKEN"])
-            repo = g.get_repo(REPO_NAME)
-            contents = repo.get_contents(DB_FILE, ref="main")
+    """Descarga el archivo Excel binario directamente usando la URL raw de GitHub para evitar corrupciones."""
+    try:
+        # Construimos la URL Raw directa de tu archivo en GitHub
+        # Reemplaza 'semaforojo-web/asistencia-sena-cmm' si tu usuario o repositorio cambiaron
+        url_raw = f"https://raw.githubusercontent.com/{REPO_NAME}/main/{DB_FILE}"
+        
+        # Si tu repositorio es PRIVADO, necesitamos enviar el token de seguridad en las cabeceras
+        headers = {}
+        if "GITHUB_TOKEN" in st.secrets:
+            headers = {"Authorization": f"token {st.secrets['GITHUB_TOKEN']}"}
             
-            # .content nos da los bytes puros codificados en base64 nativo de la API de GitHub
-            import base64
-            archivo_binario = base64.b64decode(contents.content)
-            
-            return io.BytesIO(archivo_binario)
-        except Exception as e:
-            st.sidebar.error(f"⚠️ No se pudo descargar el archivo desde GitHub: {e}")
+        response = requests.get(url_raw, headers=headers)
+        
+        if response.status_code == 200:
+            # Retornamos los bytes puros y limpios del archivo de Excel
+            return io.BytesIO(response.content)
+        else:
+            st.sidebar.error(f"⚠️ Error al acceder al archivo en GitHub (Código {response.status_code})")
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Fallo en la descarga directa: {e}")
     return None
-
 # ==========================================
 # FUNCIÓN DE LÓGICA PERSISTENTE EN GITHUB (BLINDADA)
 # ==========================================
