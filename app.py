@@ -284,8 +284,26 @@ with tab1:
                     "Trimestre": trimestre_seleccionado, "Asignacion_Num": asignacion_num_seleccionada,
                     "Resultados": materia_detectada, "Documento": row["Documento"], "Nombre": row["Nombre Completo"], "Asistencia": estado
                 })
-            pd.DataFrame(registros).to_csv("asistencia_guardada.csv", mode='a', header=False, index=False)
-            st.success("¡Asistencia guardada localmente!")
+            
+            # Guardar localmente
+            df_nuevos_pasos = pd.DataFrame(registros)
+            df_nuevos_pasos.to_csv("asistencia_guardada.csv", mode='a', header=not os.path.exists("asistencia_guardada.csv"), index=False)
+            
+            # 🔄 RESPALDO AUTOMÁTICO EN GITHUB
+            if "GITHUB_TOKEN" in st.secrets:
+                try:
+                    g = Github(st.secrets["GITHUB_TOKEN"])
+                    repo = g.get_repo(REPO_NAME)
+                    with open("asistencia_guardada.csv", "r", encoding='utf-8') as f:
+                        contenido_csv = f.read()
+                    try:
+                        sha = repo.get_contents("asistencia_guardada.csv", ref="main").sha
+                        repo.update_file("asistencia_guardada.csv", "🤖 Actualizar histórico asistencias CSV", contenido_csv, sha, branch="main")
+                    except Exception:
+                        repo.create_file("asistencia_guardada.csv", "🤖 Crear histórico asistencias CSV", contenido_csv, branch="main")
+                    st.success("🔄 ¡Historial de Asistencias respaldado en GitHub!")
+                except Exception as e:
+                    st.warning(f"Guardado local, pero no se pudo subir a GitHub: {e}")
 
 # PESTAÑA 2: EVALUACIÓN
 with tab2:
