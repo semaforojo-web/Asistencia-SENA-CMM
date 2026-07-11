@@ -17,13 +17,18 @@ REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 # FUNCIÓN AUXILIAR: DESCARGAR EXCEL DE GITHUB A MEMORIA
 # ==========================================
 def descargar_excel_desde_github():
-    """Descarga el archivo Excel desde GitHub y lo retorna como un flujo de bytes en memoria."""
+    """Descarga el archivo Excel binario desde GitHub de forma segura en bruto."""
     if "GITHUB_TOKEN" in st.secrets:
         try:
             g = Github(st.secrets["GITHUB_TOKEN"])
             repo = g.get_repo(REPO_NAME)
             contents = repo.get_contents(DB_FILE, ref="main")
-            return io.BytesIO(contents.decoded_content)
+            
+            # .content nos da los bytes puros codificados en base64 nativo de la API de GitHub
+            import base64
+            archivo_binario = base64.b64decode(contents.content)
+            
+            return io.BytesIO(archivo_binario)
         except Exception as e:
             st.sidebar.error(f"⚠️ No se pudo descargar el archivo desde GitHub: {e}")
     return None
