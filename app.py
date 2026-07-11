@@ -11,7 +11,7 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 
 # Nombre del archivo original de Excel en tu repositorio de GitHub
 DB_FILE = "Reporte de Asistencia.xlsx"
-REPO_NAME = "semaforojo-web/asistencia-sena-cmm"
+REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 
 # ==========================================
 # FUNCIÓN AUXILIAR: DESCARGAR EXCEL DE GITHUB A MEMORIA
