@@ -15,54 +15,67 @@ REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 # FUNCIÓN DE LOGICA PERSISTENTE EN GITHUB
 # ==========================================
 def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_instructores, df_asistencias=pd.DataFrame(), df_notas=pd.DataFrame()):
-    """Guarda el Excel localmente y lo sube automáticamente al repositorio de GitHub."""
-    # 1. Guardar localmente en el servidor temporal
-    with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
-        df_cabezote_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
-        df_aprendices_final.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
-        df_instructores.to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
-        if not df_asistencias.empty:
-            df_asistencias.to_excel(writer, sheet_name="Asistencias", index=False, header=False)
-        if not df_notas.empty:
-            df_notas.to_excel(writer, sheet_name="Notas", index=False, header=False)
-            
-    # 2. Sincronizar automáticamente con GitHub via API
-    if "GITHUB_TOKEN" in st.secrets:
-        try:
-            g = Github(st.secrets["GITHUB_TOKEN"])
-            repo = g.get_repo(REPO_NAME)
-            
-            with open(DB_FILE, "rb") as f:
-                content = f.read()
-                
-            # Conseguir el SHA del archivo existente en GitHub para poder reemplazarlo
-            try:
-                contents = repo.get_contents(DB_FILE, ref="main")
-                sha = contents.sha
-            except Exception:
-                sha = None # Por si el archivo no existe en el repositorio aún
-            
-            if sha:
-                repo.update_file(
-                    path=DB_FILE,
-                    message="🤖 Actualización automática desde App Streamlit [Cabezote/Asistencia]",
-                    content=content,
-                    sha=sha,
-                    branch="main"
-                )
-            else:
-                repo.create_file(
-                    path=DB_FILE,
-                    message="🤖 Creación automática desde App Streamlit [Cabezote/Asistencia]",
-                    content=content,
-                    branch="main"
-                )
-            st.success("🔄 ¡Datos sincronizados con tu repositorio de GitHub con éxito!")
-        except Exception as e:
-            st.error(f"⚠️ El archivo se guardó localmente pero falló la sincronización con GitHub: {e}")
-    else:
+    """Guarda el Excel manteniendo intactas todas las hojas originales que no modificamos."""
+    if "GITHUB_TOKEN" not in st.secrets:
         st.warning("⚠️ No se detectó el 'GITHUB_TOKEN' en los Secrets de Streamlit.")
+        return
 
+    try:
+        g = Github(st.secrets["GITHUB_TOKEN"])
+        repo = g.get_repo(REPO_NAME)
+        
+        # 1. Descargamos el archivo actual directamente desde GitHub para no perder nada
+        try:
+            contents = repo.get_contents(DB_FILE, ref="main")
+            sha = contents.sha
+            # Leemos el archivo existente como bytes
+            archivo_base = io.BytesIO(contents.decoded_content)
+            modo_escritura = 'a'       # Modo Append (Anexar/Modificar)
+            if_sheet_exists = 'replace' # Si la hoja ya existe, la reemplaza; las demás NO las toca
+        except Exception:
+            # Si el archivo por algún motivo no existe en GitHub, lo crea nuevo
+            archivo_base = io.BytesIO()
+            modo_escritura = 'w'
+            if_sheet_exists = None
+            sha = None
+
+        # 2. Operamos en memoria con el archivo base descargado
+        output = io.BytesIO()
+        if modo_escritura == 'a':
+            output.write(archivo_base.getvalue())
+            output.seek(0)
+            
+        # Al usar mode='a' e if_sheet_exists='replace', openpyxl conserva TODAS las demás hojas
+        with pd.ExcelWriter(output, engine='openpyxl', mode=modo_escritura, if_sheet_exists=if_sheet_exists) as writer:
+            df_cabezote_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
+            df_aprendices_final.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
+            df_instructores.to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
+            if not df_asistencias.empty:
+                df_asistencias.to_excel(writer, sheet_name="Asistencias", index=False, header=False)
+            if not df_notas.empty:
+                df_notas.to_excel(writer, sheet_name="Notas", index=False, header=False)
+                
+        content = output.getvalue()
+        
+        # 3. Subimos el archivo actualizado de vuelta a GitHub
+        if sha:
+            repo.update_file(
+                path=DB_FILE,
+                message="🤖 Actualización segura de hojas (Preservando estructura original)",
+                content=content,
+                sha=sha,
+                branch="main"
+            )
+        else:
+            repo.create_file(
+                path=DB_FILE,
+                message="🤖 Creación inicial del archivo estructurado",
+                content=content,
+                branch="main"
+            )
+        st.success("🔄 ¡Datos sincronizados de forma segura! Las hojas no utilizadas permanecen intactas.")
+    except Exception as e:
+        st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
 def obtener_instructores_y_contraseñas():
     """Lee los instructores (Columna A) y sus contraseñas (Columna B)"""
     dict_usuarios = {}
