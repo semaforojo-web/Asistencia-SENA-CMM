@@ -80,7 +80,7 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
                     else:
                         ws.cell(row=r_idx, column=c_idx, value=value)
 
-                # 2. Actualizamos de forma aislada únicamente nuestras 5 hojas de la app
+        # 2. Actualizamos de forma aislada únicamente nuestras hojas de la app
         escribir_dataframe_en_hoja(wb, df_cabezote_final, "Cabezote")
         escribir_dataframe_en_hoja(wb, df_aprendices_final, "Listado de aprendices")
         escribir_dataframe_en_hoja(wb, df_instructores, "Listado de instructores")
@@ -94,18 +94,11 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         # ========================================================
         ws_cabezote = wb["Cabezote"]
         
-        # Opción A: Si quieres fijarla estrictamente en la celda A37
-        #ws_cabezote["A37"] = "=VLOOKUP(G37,'Listado de aprendices'!$E:$I,5,0)"
-        
-        # Opción B (Dinámica): Si prefieres que se aplique automáticamente a la ÚLTIMA fila disponible
-        # ultima_fila = ws_cabezote.max_row
-        ws_cabezote[f"A{ultima_fila}"] = f"=VLOOKUP(G{ultima_fila},'Listado de aprendices'!$E:$I,5,0)"
+        # Opción B (Dinámica): Se aplica automáticamente a la ÚLTIMA fila real escrita
+        ultima_fila = ws_cabezote.max_row
+        if ultima_fila >= 1:
+            ws_cabezote[f"A{ultima_fila}"] = f"=VLOOKUP(G{ultima_fila},'Listado de aprendices'!$E:$I,5,0)"
         # ========================================================
-
-        if not df_asistencias.empty:
-            escribir_dataframe_en_hoja(wb, df_asistencias, "Asistencias")
-        if not df_notas.empty:
-            escribir_dataframe_en_hoja(wb, df_notas, "Notas")
 
         if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
             wb.remove(wb["Sheet"])
@@ -139,6 +132,7 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
     except Exception as e:
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
 
+        
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
