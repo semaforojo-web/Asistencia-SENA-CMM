@@ -9,7 +9,7 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 
 # Nombre del archivo original de Excel en tu repositorio de GitHub
 DB_FILE = "Reporte de Asistencia.xlsx"
-REPO_NAME = "semaforojo-web/asistencia-sena-cmm"  # 👈 Configurado correctamente
+REPO_NAME = "semaforojo-web/asistencia-sena-cmm"
 
 # ==========================================
 # FUNCIÓN DE LOGICA PERSISTENTE EN GITHUB
@@ -86,7 +86,7 @@ def obtener_instructores_y_contraseñas():
     return ["No Detectado"], {}
 
 def cargar_datos():
-    """Carga y procesa el listado de aprendices desde la hoja correspondiente"""
+    """Carga y procesa el listado de aprendices desde la hoja correspondiente de forma segura"""
     if os.path.exists(DB_FILE):
         try:
             df = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None)
@@ -109,10 +109,9 @@ def cargar_datos():
             
             return df_procesado[["Grupo", "Documento", "Nombre Completo"]].reset_index(drop=True)
         except Exception as e:
-            st.error(f"Error al filtrar listado de aprendices: {e}")
+            st.sidebar.error(f"⚠️ Error al filtrar listado de aprendices: {e}")
             
-    data = {"Grupo": ["Error"], "Documento": ["0"], "Nombre Completo": ["ARCHIVO EXCEL NO DETECTADO"]}
-    return pd.DataFrame(data)
+    return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
 
 def obtener_trimestres_disponibles(grupo, instructor):
     """Busca los trimestres vinculados a un grupo e instructor en el Cabezote"""
@@ -122,7 +121,6 @@ def obtener_trimestres_disponibles(grupo, instructor):
             df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
             
-            # Comparamos ignorando mayúsculas/minúsculas solo para el filtro visual temporal
             filtro = (df_cab[6] == str(grupo)) & (df_cab[5].str.upper() == str(instructor).strip().upper())
             resultado = df_cab[filtro]
             
@@ -215,7 +213,7 @@ if not st.session_state["autenticado"]:
                     else:
                         st.error("Contraseña incorrecta. Inténtelo de nuevo.")
                 else:
-                    st.error("Por favor, cargue la estructura de instructores correcta en su Excel de GitHub.")
+                    st.error("Por favor, cargue la estructura de instructores correcta en su Excel de GitHub o configure sus Secrets.")
     st.stop()
 
 # --- EJECUCIÓN PRINCIPAL ---
@@ -239,8 +237,8 @@ st.sidebar.markdown(f"👤 **Instructor activo:**\n`{instructor_seleccionado}`")
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Filtros de Planificación")
 
-lista_grupos = sorted(df_aprendices["Grupo"].dropna().unique())
-grupo_seleccionado = st.sidebar.selectbox("1. Seleccione el Grupo:", lista_grupos if lista_grupos else ["Error"])
+lista_grupos = sorted(df_aprendices["Grupo"].dropna().unique()) if not df_aprendices.empty else []
+grupo_seleccionado = st.sidebar.selectbox("1. Seleccione el Grupo:", lista_grupos if lista_grupos else ["Sin datos"])
 
 lista_trimestres_dinamicos = obtener_trimestres_disponibles(grupo_seleccionado, instructor_seleccionado)
 trimestre_seleccionado = st.sidebar.selectbox("3. Seleccione el Trimestre:", lista_trimestres_dinamicos)
@@ -253,7 +251,7 @@ materia_detectada = filtrar_materia_final(grupo_seleccionado, instructor_selecci
 st.sidebar.markdown("---")
 st.sidebar.info(f"📚 **Materia Vinculada:**\n{materia_detectada}")
 
-alumnos_grupo = df_aprendices[df_aprendices["Grupo"] == grupo_seleccionado].reset_index(drop=True)
+alumnos_grupo = df_aprendices[df_aprendices["Grupo"] == grupo_seleccionado].reset_index(drop=True) if not df_aprendices.empty else pd.DataFrame()
 st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_grupo)}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Alimentar y Cargar Bases"])
@@ -263,7 +261,7 @@ with tab1:
     st.header(f"📋 Control de Asistencia")
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
     
-    if alumnos_grupo.empty or grupo_seleccionado == "Error":
+    if alumnos_grupo.empty:
         st.warning(f"No hay aprendices activos asignados al grupo seleccionado.")
     else:
         with st.form(key=f"formulario_asistencia_{grupo_seleccionado}"):
@@ -285,11 +283,9 @@ with tab1:
                     "Resultados": materia_detectada, "Documento": row["Documento"], "Nombre": row["Nombre Completo"], "Asistencia": estado
                 })
             
-            # Guardar localmente
             df_nuevos_pasos = pd.DataFrame(registros)
             df_nuevos_pasos.to_csv("asistencia_guardada.csv", mode='a', header=not os.path.exists("asistencia_guardada.csv"), index=False)
             
-            # 🔄 RESPALDO AUTOMÁTICO EN GITHUB
             if "GITHUB_TOKEN" in st.secrets:
                 try:
                     g = Github(st.secrets["GITHUB_TOKEN"])
@@ -310,7 +306,7 @@ with tab2:
     st.header(f"📝 Registro de Juicios Evaluativos")
     fecha_evaluacion = st.date_input("Fecha de Evaluación:", datetime.now())
     
-    if alumnos_grupo.empty or grupo_seleccionado == "Error":
+    if alumnos_grupo.empty:
         st.warning("No hay alumnos para evaluar.")
     else:
         with st.form(key=f"formulario_evaluacion_{grupo_seleccionado}"):
@@ -331,11 +327,9 @@ with tab2:
                     "Nombre": row["Nombre Completo"], "Evaluación (A/D)": eval_dict[idx], "Observaciones": obs_dict[idx]
                 })
             
-            # Guardar localmente
             df_nuevas_notas = pd.DataFrame(registros_eval)
             df_nuevas_notas.to_csv("evaluaciones_guardadas.csv", mode='a', header=not os.path.exists("evaluaciones_guardadas.csv"), index=False)
             
-            # 🔄 RESPALDO AUTOMÁTICO EN GITHUB (Corregido el error de nombre de archivo)
             if "GITHUB_TOKEN" in st.secrets:
                 try:
                     g = Github(st.secrets["GITHUB_TOKEN"])
@@ -355,12 +349,12 @@ with tab2:
 with tab3:
     st.header("📈 Historial de Registros")
     sub_tab1, sub_tab2 = st.tabs(["Histórico de Asistencias", "Histórico de Notas"])
+    
     with sub_tab1:
         if os.path.exists("asistencia_guardada.csv"):
             df_asist_hist = pd.read_csv("asistencia_guardada.csv")
             st.dataframe(df_asist_hist, use_container_width=True)
             
-            # Botón de descarga para asistencias
             csv_asist = df_asist_hist.to_csv(index=False, encoding='utf-8-sig')
             st.download_button(
                 label="📥 Descargar Historial de Asistencias Completo (CSV)",
@@ -369,12 +363,14 @@ with tab3:
                 mime="text/csv",
                 use_container_width=True
             )
+        else:
+            st.info("No hay registros de asistencia locales aún.")
+            
     with sub_tab2:
         if os.path.exists("evaluaciones_guardadas.csv"):
             df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
             st.dataframe(df_eval_hist, use_container_width=True)
             
-            # Botón de descarga para notas
             csv_notas = df_eval_hist.to_csv(index=False, encoding='utf-8-sig')
             st.download_button(
                 label="📥 Descargar Historial de Notas Completo (CSV)",
@@ -383,54 +379,50 @@ with tab3:
                 mime="text/csv",
                 use_container_width=True
             )
+        else:
+            st.info("No hay registros de notas locales aún.")
 
-# PESTAÑA 4: GESTIÓN DE BASES DE DATOS (CON CONEXIÓN DIRECTA A GITHUB)
+# PESTAÑA 4: GESTIÓN DE BASES DE DATOS
 with tab4:
     st.header("📂 Gestión y Alimentación de la Base de Datos")
     opcion_carga = st.radio("Seleccione el método para gestionar datos:", ["✍️ Alimentar Cabezote Directamente (Formulario)", "📁 Subir Archivos Completos (.xlsx)"])
     
     if opcion_carga == "✍️ Alimentar Cabezote Directamente (Formulario)":
         with st.form("form_registro_directo_cabezote_completo"):
-            # Fila 1: Datos Base (A, F, G, D)
             c1, c2, c3, c4 = st.columns(4)
-            input_grupo = c1.text_input("Número de Grupo (Columna G / Posición 6):", placeholder="Ej: 3141501")
-            input_instructor = c2.text_input("Nombre del Instructor (Columna F / Posición 5):", value=instructor_seleccionado, disabled=True) # 👈 Bloqueado para evitar errores
-            input_asignacion_num = c3.selectbox("Número de asignación (Columna D / Posición 3):", ["1", "2", "3"])
-            input_resultados = c4.text_input("Resultados de Aprendizaje (Columna K / Posición 10):", placeholder="Ej: Mantenimiento")
+            input_grupo = c1.text_input("Número de Grupo (Columna G):", placeholder="Ej: 3141501")
+            input_instructor = c2.text_input("Nombre del Instructor (Columna F):", value=instructor_seleccionado, disabled=True)
+            input_asignacion_num = c3.selectbox("Número de asignación (Columna D):", ["1", "2", "3"])
+            input_resultados = c4.text_input("Resultados de Aprendizaje (Columna K):", placeholder="Ej: Mantenimiento")
             
-            # Fila 2: Información del Proyecto
             st.markdown("##### 🚀 Planificación Estratégica del Proyecto")
             c5, c6, c7 = st.columns(3)
-            input_fase = c5.text_input("Fase del proyecto (Columna H / Posición 7):")
-            input_actividades = c6.text_area("Actividades del Proyecto (Columna I / Posición 8):", height=68)
-            input_competencia = c7.text_area("Competencia (Columna J / Posición 9):", height=68)
+            input_fase = c5.text_input("Fase del proyecto (Columna H):")
+            input_actividades = c6.text_area("Actividades del Proyecto (Columna I):", height=68)
+            input_competencia = c7.text_area("Competencia (Columna J):", height=68)
             
-            # Fila 3: Resultados, Horas y Tiempos
             c8, c9, c10, c11 = st.columns([3, 1, 1, 1])
-            input_li = c8.text_input("Linea (Columna L / Posición 11):")
-            input_tri = c9.text_input("Trimestre rep (Columna O / Posición 14):")
-            input_horas = c10.text_input("Número de Horas (Columna M / Posición 12):")
-            input_fecha_ini = c11.text_input("Fecha de inicio (Columna N / Posición 13):", placeholder="DD/MM/AAAA")
+            input_li = c8.text_input("Linea (Columna L):")
+            input_tri = c9.text_input("Trimestre rep (Columna O):")
+            input_horas = c10.text_input("Número de Horas (Columna M):")
+            input_fecha_ini = c11.text_input("Fecha de inicio (Columna N):", placeholder="DD/MM/AAAA")
             
-            # Fila 4: Ambientes y Horarios
             st.markdown("##### 🏫 Datos Locales del Ambiente y Jornada")
             c12, c13, c14, c15 = st.columns(4)
-            input_ambiente = c12.text_input("Ambiente (Columna P / Posición 15):")
-            input_dia = c13.text_input("Día (Columna Q / Posición 16):")
-            input_horario = c14.text_input("Horario (Columna R / Posición 17):")
-            input_jornada = c15.text_input("Jornada (Columna S / Posición 18):")
+            input_ambiente = c12.text_input("Ambiente (Columna P):")
+            input_dia = c13.text_input("Día (Columna Q):")
+            input_horario = c14.text_input("Horario (Columna R):")
+            input_jornada = c15.text_input("Jornada (Columna S):")
             
-            # Fila 5: Evidencias
-            st.markdown("##### ##### 📑 Evidencias del Proceso (1 al 5)")
+            st.markdown("##### 📑 Evidencias del Proceso (1 al 5)")
             col_ev1, col_ev2, col_ev3, col_ev4, col_ev5 = st.columns(5)
-            input_ev1 = col_ev1.text_input("Evidencia 1 (Pos 19):")
-            input_ev2 = col_ev2.text_input("Evidencia 2 (Pos 20):")
-            input_ev3 = col_ev3.text_input("Evidencia 3 (Pos 21):")
-            input_ev4 = col_ev4.text_input("Evidencia 4 (Pos 22):")
-            input_ev5 = col_ev5.text_input("Evidencia 5 (Pos 23):")
+            input_ev1 = col_ev1.text_input("Evidencia 1:")
+            input_ev2 = col_ev2.text_input("Evidencia 2:")
+            input_ev3 = col_ev3.text_input("Evidencia 3:")
+            input_ev4 = col_ev4.text_input("Evidencia 4:")
+            input_ev5 = col_ev5.text_input("Evidencia 5:")
             
-            # Desplegables para descripciones prácticas (1 a 11)
-            with st.expander("🛠️ Descripciones Prácticas (1 al 11) - Posiciones 25 a 35"):
+            with st.expander("🛠️ Descripciones Prácticas (1 al 11)"):
                 cp1, cp2, cp3, cp4 = st.columns(4)
                 input_p1 = cp1.text_input("Descripción práctica 1:")
                 input_p2 = cp2.text_input("Descripción práctica 2:")
@@ -448,7 +440,6 @@ with tab4:
                 input_p10 = cp10.text_input("Descripción práctica 10:")
                 input_p11 = cp11.text_input("Descripción práctica 11:")
                 
-            # Desplegables para nombres de sesiones (1 a 11) y Trimestre
             with st.expander("📅 Nombres de la Sesión (1 al 11) y Observaciones Finales"):
                 cs1, cs2, cs3, cs4 = st.columns(4)
                 input_s1 = cs1.text_input("Nombre de la sesión 1:")
@@ -469,8 +460,8 @@ with tab4:
                 
                 st.markdown("---")
                 c_f1, c_f2 = st.columns(2)
-                input_trimestre = c_f1.text_input("Trimestre en curso (Columna AV / Posición 47):", placeholder="Ej: Trimestre 1")
-                input_observaciones = c_f2.text_input("Observaciones (Columna AW / Posición 46):")
+                input_trimestre = c_f1.text_input("Trimestre en curso (Columna AV):", placeholder="Ej: Trimestre 1")
+                input_observaciones = c_f2.text_input("Observaciones (Columna AW):")
             
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
             
