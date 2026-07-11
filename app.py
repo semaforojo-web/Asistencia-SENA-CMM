@@ -335,12 +335,12 @@ with tab2:
             df_nuevas_notas = pd.DataFrame(registros_eval)
             df_nuevas_notas.to_csv("evaluaciones_guardadas.csv", mode='a', header=not os.path.exists("evaluaciones_guardadas.csv"), index=False)
             
-            # 🔄 RESPALDO AUTOMÁTICO EN GITHUB
+            # 🔄 RESPALDO AUTOMÁTICO EN GITHUB (Corregido el error de nombre de archivo)
             if "GITHUB_TOKEN" in st.secrets:
                 try:
                     g = Github(st.secrets["GITHUB_TOKEN"])
                     repo = g.get_repo(REPO_NAME)
-                    with open("asueluaciones_guardadas.csv", "r", encoding='utf-8') as f:
+                    with open("evaluaciones_guardadas.csv", "r", encoding='utf-8') as f:
                         contenido_notas = f.read()
                     try:
                         sha = repo.get_contents("evaluaciones_guardadas.csv", ref="main").sha
@@ -359,10 +359,30 @@ with tab3:
         if os.path.exists("asistencia_guardada.csv"):
             df_asist_hist = pd.read_csv("asistencia_guardada.csv")
             st.dataframe(df_asist_hist, use_container_width=True)
+            
+            # Botón de descarga para asistencias
+            csv_asist = df_asist_hist.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                label="📥 Descargar Historial de Asistencias Completo (CSV)",
+                data=csv_asist,
+                file_name="asistencia_guardada_completa.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
     with sub_tab2:
         if os.path.exists("evaluaciones_guardadas.csv"):
             df_eval_hist = pd.read_csv("evaluaciones_guardadas.csv")
             st.dataframe(df_eval_hist, use_container_width=True)
+            
+            # Botón de descarga para notas
+            csv_notas = df_eval_hist.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                label="📥 Descargar Historial de Notas Completo (CSV)",
+                data=csv_notas,
+                file_name="evaluaciones_guardadas_completa.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
 # PESTAÑA 4: GESTIÓN DE BASES DE DATOS (CON CONEXIÓN DIRECTA A GITHUB)
 with tab4:
@@ -455,30 +475,30 @@ with tab4:
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
             
         if boton_agregar_cab:
-            if input_grupo and input_instructor and input_trimestre: # 👈 Corregido el error de validación doble
+            if input_grupo and input_instructor and input_trimestre:
                 try:
                     df_cab_existente = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     df_apr_existente = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
-                    df_inst_existente = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None) if os.path.exists(DB_FILE) else pd.DataFrame() # 👈 Corregido: Cargada la base de instructores faltante
+                    df_inst_existente = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None) if os.path.exists(DB_FILE) else pd.DataFrame()
                     
                     ancho_columnas = 49
                     nueva_fila = [""] * ancho_columnas
                     
-                    nueva_fila[3] = str(input_asignacion_num).strip()          # Columna D
-                    nueva_fila[5] = str(input_instructor).strip()              # 👈 ¡Corregido! Respeta mayúsculas y minúsculas exactas
-                    nueva_fila[6] = str(input_grupo).strip()                    # Columna G (GRUPO)
-                    nueva_fila[7] = str(input_fase).strip()                     # Columna H (Fase)
-                    nueva_fila[8] = str(input_actividades).strip()              # Columna I (Actividades)
-                    nueva_fila[9] = str(input_competencia).strip()              # Columna J (Competencia)
-                    nueva_fila[10] = str(input_resultados).strip()          # Columna K
-                    nueva_fila[11] = str(input_li).strip()                      # Columna L (RA)
-                    nueva_fila[12] = str(input_horas).strip()                   # Columna M (Línea)
-                    nueva_fila[13] = str(input_fecha_ini).strip()                   # Columna N (Horas)
-                    nueva_fila[14] = str(input_tri).strip()               # Columna O (Fecha inicio)
-                    nueva_fila[15] = str(input_ambiente).strip()                # Columna Q (Ambiente)
-                    nueva_fila[16] = str(input_dia).strip()                     # Columna R (Día)
-                    nueva_fila[17] = str(input_horario).strip()                 # Columna S (Horario)
-                    nueva_fila[18] = str(input_jornada).strip()                 # Columna T (Jornada)
+                    nueva_fila[3] = str(input_asignacion_num).strip()
+                    nueva_fila[5] = str(input_instructor).strip()
+                    nueva_fila[6] = str(input_grupo).strip()
+                    nueva_fila[7] = str(input_fase).strip()
+                    nueva_fila[8] = str(input_actividades).strip()
+                    nueva_fila[9] = str(input_competencia).strip()
+                    nueva_fila[10] = str(input_resultados).strip()
+                    nueva_fila[11] = str(input_li).strip()
+                    nueva_fila[12] = str(input_horas).strip()
+                    nueva_fila[13] = str(input_fecha_ini).strip()
+                    nueva_fila[14] = str(input_tri).strip()
+                    nueva_fila[15] = str(input_ambiente).strip()
+                    nueva_fila[16] = str(input_dia).strip()
+                    nueva_fila[17] = str(input_horario).strip()
+                    nueva_fila[18] = str(input_jornada).strip()
                     
                     nueva_fila[19] = str(input_ev1).strip()
                     nueva_fila[20] = str(input_ev2).strip()
@@ -510,12 +530,11 @@ with tab4:
                     nueva_fila[44] = str(input_s10).strip()
                     nueva_fila[45] = str(input_s11).strip()
                     
-                    nueva_fila[46] = str(input_observaciones).strip()               # Columna AV (Trimestre)
-                    nueva_fila[47] = str(input_trimestre).strip()           # Columna AW (Observaciones)
+                    nueva_fila[46] = str(input_observaciones).strip()
+                    nueva_fila[47] = str(input_trimestre).strip()
                     
                     df_cab_final = pd.concat([df_cab_existente, pd.DataFrame([nueva_fila])], ignore_index=True)
                     
-                    # Llamamos a la sincronización
                     guardar_y_sincronizar_a_github(df_cab_final, df_apr_existente, df_inst_existente)
                     st.rerun()
                 except Exception as e:
@@ -546,7 +565,6 @@ with tab4:
                 }).dropna(subset=["Grupo", "Instructor"], how="all")
                 st.dataframe(df_resumen, use_container_width=True)
                 
-                # Botón para descargar la vista previa en formato CSV
                 csv_data = df_resumen.to_csv(index=False, encoding='utf-8-sig')
                 st.download_button(
                     label="📥 Descargar esta vista previa en formato CSV",
