@@ -25,28 +25,28 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         g = Github(st.secrets["GITHUB_TOKEN"])
         repo = g.get_repo(REPO_NAME)
         
-        # 1. Descargamos el archivo actual directamente desde GitHub para no perder nada
+        # 1. Intentar descargar el archivo actual de GitHub para conservar las otras hojas
+        sha = None
+        archivo_base = io.BytesIO()
+        modo_escritura = 'w'
+        if_sheet_exists = None
+        
         try:
             contents = repo.get_contents(DB_FILE, ref="main")
-            sha = contents.sha
-            # Leemos el archivo existente como bytes
+            sha = contents.sha  # Obtenemos el SHA real aquí directamente
             archivo_base = io.BytesIO(contents.decoded_content)
-            modo_escritura = 'a'       # Modo Append (Anexar/Modificar)
-            if_sheet_exists = 'replace' # Si la hoja ya existe, la reemplaza; las demás NO las toca
+            modo_escritura = 'a'
+            if_sheet_exists = 'replace'
         except Exception:
-            # Si el archivo por algún motivo no existe en GitHub, lo crea nuevo
-            archivo_base = io.BytesIO()
-            modo_escritura = 'w'
-            if_sheet_exists = None
-            sha = None
+            # Si el archivo no existe en el repositorio, se creará uno nuevo
+            pass
 
-        # 2. Operamos en memoria con el archivo base descargado
+        # 2. Operar en memoria con el archivo base
         output = io.BytesIO()
         if modo_escritura == 'a':
             output.write(archivo_base.getvalue())
             output.seek(0)
             
-        # Al usar mode='a' e if_sheet_exists='replace', openpyxl conserva TODAS las demás hojas
         with pd.ExcelWriter(output, engine='openpyxl', mode=modo_escritura, if_sheet_exists=if_sheet_exists) as writer:
             df_cabezote_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
             df_aprendices_final.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
@@ -58,13 +58,20 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
                 
         content = output.getvalue()
         
-        # 3. Subimos el archivo actualizado de vuelta a GitHub
+        # 3. Forzar una segunda verificación del SHA antes de enviar para evitar el error 422
+        try:
+            contents_verificar = repo.get_contents(DB_FILE, ref="main")
+            sha = contents_verificar.sha
+        except Exception:
+            sha = None
+
+        # 4. Subir el archivo actualizado de vuelta a GitHub de forma segura
         if sha:
             repo.update_file(
                 path=DB_FILE,
                 message="🤖 Actualización segura de hojas (Preservando estructura original)",
                 content=content,
-                sha=sha,
+                sha=sha,  # Aquí ya va completamente blindado el SHA obligatorio
                 branch="main"
             )
         else:
