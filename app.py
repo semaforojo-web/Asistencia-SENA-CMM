@@ -11,10 +11,25 @@ st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layo
 
 # Nombre del archivo original de Excel en tu repositorio de GitHub
 DB_FILE = "Reporte de Asistencia.xlsx"
-REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
+REPO_NAME = "semaforojo-web/asistencia-sena-cmm"
 
 # ==========================================
-# FUNCIÓN DE LOGICA PERSISTENTE EN GITHUB
+# FUNCIÓN AUXILIAR: DESCARGAR EXCEL DE GITHUB A MEMORIA
+# ==========================================
+def descargar_excel_desde_github():
+    """Descarga el archivo Excel desde GitHub y lo retorna como un flujo de bytes en memoria."""
+    if "GITHUB_TOKEN" in st.secrets:
+        try:
+            g = Github(st.secrets["GITHUB_TOKEN"])
+            repo = g.get_repo(REPO_NAME)
+            contents = repo.get_contents(DB_FILE, ref="main")
+            return io.BytesIO(contents.decoded_content)
+        except Exception as e:
+            st.sidebar.error(f"⚠️ No se pudo descargar el archivo desde GitHub: {e}")
+    return None
+
+# ==========================================
+# FUNCIÓN DE LÓGICA PERSISTENTE EN GITHUB (BLINDADA)
 # ==========================================
 def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_instructores, df_asistencias=pd.DataFrame(), df_notas=pd.DataFrame()):
     """Guarda los datos en el Excel forzando la apertura nativa de openpyxl para que NUNCA elimine otras hojas."""
@@ -26,43 +41,34 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         g = Github(st.secrets["GITHUB_TOKEN"])
         repo = g.get_repo(REPO_NAME)
         
-        # 1. Descargamos el archivo actual directamente de GitHub
+        archivo_base = descargar_excel_desde_github()
+        
         try:
             contents = repo.get_contents(DB_FILE, ref="main")
             sha = contents.sha
-            archivo_base = io.BytesIO(contents.decoded_content)
-            
-            # Forzamos a openpyxl a cargar el libro completo con ABSOLUTAMENTE TODAS sus hojas originales
             wb = load_workbook(archivo_base)
         except Exception:
-            # Si el archivo por alguna razón no existe, crea uno completamente nuevo en blanco
             from openpyxl import Workbook
             wb = Workbook()
             sha = None
 
-        # Función auxiliar para vaciar una hoja vieja y escribir el DataFrame nuevo celda por celda
         def escribir_dataframe_en_hoja(wb_objeto, df_datos, nombre_hoja):
             if df_datos.empty:
                 return
-            # Si la hoja ya existe, la limpiamos por completo pero NO la borramos del libro
             if nombre_hoja in wb_objeto.sheetnames:
                 ws = wb_objeto[nombre_hoja]
                 ws.delete_rows(1, ws.max_row + 1)
                 ws.delete_cols(1, ws.max_column + 1)
             else:
-                # Si la hoja no existe, la creamos nueva
                 ws = wb_objeto.create_sheet(title=nombre_hoja)
             
-            # Escribimos los nuevos datos celda por celda para asegurar compatibilidad de formato
             for r_idx, row in enumerate(df_datos.values, start=1):
                 for c_idx, value in enumerate(row, start=1):
-                    # Evitamos guardar valores nulos como texto "nan"
                     if pd.isna(value):
                         ws.cell(row=r_idx, column=c_idx, value="")
                     else:
                         ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # 2. Actualizamos de forma aislada únicamente nuestras 5 hojas de la app
         escribir_dataframe_en_hoja(wb, df_cabezote_final, "Cabezote")
         escribir_dataframe_en_hoja(wb, df_aprendices_final, "Listado de aprendices")
         escribir_dataframe_en_hoja(wb, df_instructores, "Listado de instructores")
@@ -71,23 +77,19 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         if not df_notas.empty:
             escribir_dataframe_en_hoja(wb, df_notas, "Notas")
 
-        # Si al crear el archivo por primera vez quedó la hoja por defecto de openpyxl llamada 'Sheet', la quitamos
         if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
             wb.remove(wb["Sheet"])
 
-        # 3. Guardamos el libro completo desde openpyxl preservando todo su contenido original
         output = io.BytesIO()
         wb.save(output)
         content = output.getvalue()
         
-        # 4. Verificación de seguridad del SHA en tiempo real
         try:
             contents_verificar = repo.get_contents(DB_FILE, ref="main")
             sha = contents_verificar.sha
         except Exception:
             sha = None
 
-        # 5. Enviamos el archivo completo actualizado a GitHub
         if sha:
             repo.update_file(
                 path=DB_FILE,
@@ -106,11 +108,39 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         st.success("🔄 ¡Datos sincronizados! El resto de tus hojas originales han sido preservadas intactas.")
     except Exception as e:
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
-def cargar_datos():
-    """Carga y procesa el listado de aprendices desde la hoja correspondiente de forma segura"""
-    if os.path.exists(DB_FILE):
+
+# ==========================================
+# FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
+# ==========================================
+def obtener_instructores_y_contraseñas():
+    """Lee los instructores y sus contraseñas desde GitHub de forma segura"""
+    dict_usuarios = {}
+    lista_instructores = []
+    
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
         try:
-            df = pd.read_excel(DB_FILE, sheet_name="Listado de aprendices", header=None)
+            df_inst = pd.read_excel(archivo_memoria, sheet_name="Listado de instructores", header=None)
+            for idx, row in df_inst.iterrows():
+                nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
+                password = str(row[1]).strip() if df_inst.shape[1] > 1 and pd.notna(row[1]) else "SENA2026"
+                
+                if nombre.upper() != "INSTRUCTOR" and nombre != "" and nombre.upper() != "NAN":
+                    dict_usuarios[nombre] = password
+                    lista_instructores.append(nombre)
+                    
+            return sorted(lista_instructores), dict_usuarios
+        except Exception:
+            return ["Falta hoja 'Listado de instructores'"], {}
+            
+    return ["No Detectado"], {}
+
+def cargar_datos():
+    """Carga y procesa el listado de aprendices desde GitHub sin usar el disco local"""
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
+        try:
+            df = pd.read_excel(archivo_memoria, sheet_name="Listado de aprendices", header=None)
             if df.empty:
                 return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
                 
@@ -135,10 +165,11 @@ def cargar_datos():
     return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
 
 def obtener_trimestres_disponibles(grupo, instructor):
-    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote"""
-    if os.path.exists(DB_FILE):
+    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub"""
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
         try:
-            df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
             df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
             
@@ -155,10 +186,11 @@ def obtener_trimestres_disponibles(grupo, instructor):
     return ["Sin trimestres detectados"]
 
 def obtener_materias_disponibles(grupo, instructor, trimestre):
-    """Obtiene los números de asignación cargados para la combinación seleccionada"""
-    if os.path.exists(DB_FILE):
+    """Obtiene los números de asignación cargados desde GitHub"""
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
         try:
-            df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
             df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
             df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
@@ -178,10 +210,11 @@ def obtener_materias_disponibles(grupo, instructor, trimestre):
     return ["1", "2", "3"]
 
 def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
-    """Retorna el nombre largo de la asignatura basándose en el número de asignación"""
-    if os.path.exists(DB_FILE):
+    """Retorna el nombre largo de la asignatura basándose en el archivo de GitHub"""
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
         try:
-            df_cab = pd.read_excel(DB_FILE, sheet_name="Cabezote", header=None)
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
             df_cab[3] = df_cab[3].astype(str).str.strip()
             df_cab[5] = df_cab[5].astype(str).str.strip()
             df_cab[6] = df_cab[6].astype(str).str.strip()
@@ -201,8 +234,7 @@ def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
             return f"Asignación {asignacion_num} (Sin descripción en Cabezote)"
         except Exception as e:
             return f"Error: {e}"
-    return "Archivo Excel no encontrado"
-
+    return "Archivo Excel no encontrado en GitHub"
 # --- MANEJO DEL ESTADO DE SESIÓN (LOGIN) ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
