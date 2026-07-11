@@ -558,6 +558,11 @@ with tab4:
                     
                     nueva_fila[3] = str(input_asignacion_num).strip()
                     nueva_fila[5] = str(input_instructor).strip()
+                    grupo_limpio = str(input_grupo).strip()
+                    if grupo_limpio.isdigit():
+                       nueva_fila[6] = int(grupo_limpio)
+                    else:
+                       nueva_fila[6] = grupo_limpio
                     nueva_fila[6] = str(input_grupo).strip()
                     nueva_fila[7] = str(input_fase).strip()
                     nueva_fila[8] = str(input_actividades).strip()
