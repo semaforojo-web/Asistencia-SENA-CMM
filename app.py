@@ -144,11 +144,12 @@ def obtener_instructores_y_contraseñas():
             
     return ["No se pudo conectar a GitHub"], {}
 def cargar_datos():
-    """Carga y procesa el listado de aprendices desde GitHub sin usar el disco local"""
+    """Carga y procesa el listado de aprendices desde GitHub asegurando el motor openpyxl"""
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            df = pd.read_excel(archivo_memoria, sheet_name="Listado de aprendices", header=None)
+            # Forzamos el uso de engine='openpyxl' para evitar errores de lectura binaria
+            df = pd.read_excel(archivo_memoria, sheet_name="Listado de aprendices", header=None, engine='openpyxl')
             if df.empty:
                 return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
                 
