@@ -4,6 +4,7 @@ import os
 import io
 from datetime import datetime
 from github import Github
+from openpyxl import load_workbook
 
 # Configuración de la página para entorno móvil y de escritorio
 st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layout="wide")
@@ -16,7 +17,7 @@ REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 # FUNCIÓN DE LOGICA PERSISTENTE EN GITHUB
 # ==========================================
 def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_instructores, df_asistencias=pd.DataFrame(), df_notas=pd.DataFrame()):
-    """Guarda el Excel manteniendo intactas todas las hojas originales que no modificamos."""
+    """Guarda los datos en el Excel forzando la apertura nativa de openpyxl para que NUNCA elimine otras hojas."""
     if "GITHUB_TOKEN" not in st.secrets:
         st.warning("⚠️ No se detectó el 'GITHUB_TOKEN' en los Secrets de Streamlit.")
         return
@@ -25,87 +26,86 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         g = Github(st.secrets["GITHUB_TOKEN"])
         repo = g.get_repo(REPO_NAME)
         
-        # 1. Intentar descargar el archivo actual de GitHub para conservar las otras hojas
-        sha = None
-        archivo_base = io.BytesIO()
-        modo_escritura = 'w'
-        if_sheet_exists = None
-        
+        # 1. Descargamos el archivo actual directamente de GitHub
         try:
             contents = repo.get_contents(DB_FILE, ref="main")
-            sha = contents.sha  # Obtenemos el SHA real aquí directamente
+            sha = contents.sha
             archivo_base = io.BytesIO(contents.decoded_content)
-            modo_escritura = 'a'
-            if_sheet_exists = 'replace'
-        except Exception:
-            # Si el archivo no existe en el repositorio, se creará uno nuevo
-            pass
-
-        # 2. Operar en memoria con el archivo base
-        output = io.BytesIO()
-        if modo_escritura == 'a':
-            output.write(archivo_base.getvalue())
-            output.seek(0)
             
-        with pd.ExcelWriter(output, engine='openpyxl', mode=modo_escritura, if_sheet_exists=if_sheet_exists) as writer:
-            df_cabezote_final.to_excel(writer, sheet_name="Cabezote", index=False, header=False)
-            df_aprendices_final.to_excel(writer, sheet_name="Listado de aprendices", index=False, header=False)
-            df_instructores.to_excel(writer, sheet_name="Listado de instructores", index=False, header=False)
-            if not df_asistencias.empty:
-                df_asistencias.to_excel(writer, sheet_name="Asistencias", index=False, header=False)
-            if not df_notas.empty:
-                df_notas.to_excel(writer, sheet_name="Notas", index=False, header=False)
-                
+            # Forzamos a openpyxl a cargar el libro completo con ABSOLUTAMENTE TODAS sus hojas originales
+            wb = load_workbook(archivo_base)
+        except Exception:
+            # Si el archivo por alguna razón no existe, crea uno completamente nuevo en blanco
+            from openpyxl import Workbook
+            wb = Workbook()
+            sha = None
+
+        # Función auxiliar para vaciar una hoja vieja y escribir el DataFrame nuevo celda por celda
+        def escribir_dataframe_en_hoja(wb_objeto, df_datos, nombre_hoja):
+            if df_datos.empty:
+                return
+            # Si la hoja ya existe, la limpiamos por completo pero NO la borramos del libro
+            if nombre_hoja in wb_objeto.sheetnames:
+                ws = wb_objeto[nombre_hoja]
+                ws.delete_rows(1, ws.max_row + 1)
+                ws.delete_cols(1, ws.max_column + 1)
+            else:
+                # Si la hoja no existe, la creamos nueva
+                ws = wb_objeto.create_sheet(title=nombre_hoja)
+            
+            # Escribimos los nuevos datos celda por celda para asegurar compatibilidad de formato
+            for r_idx, row in enumerate(df_datos.values, start=1):
+                for c_idx, value in enumerate(row, start=1):
+                    # Evitamos guardar valores nulos como texto "nan"
+                    if pd.isna(value):
+                        ws.cell(row=r_idx, column=c_idx, value="")
+                    else:
+                        ws.cell(row=r_idx, column=c_idx, value=value)
+
+        # 2. Actualizamos de forma aislada únicamente nuestras 5 hojas de la app
+        escribir_dataframe_en_hoja(wb, df_cabezote_final, "Cabezote")
+        escribir_dataframe_en_hoja(wb, df_aprendices_final, "Listado de aprendices")
+        escribir_dataframe_en_hoja(wb, df_instructores, "Listado de instructores")
+        if not df_asistencias.empty:
+            escribir_dataframe_en_hoja(wb, df_asistencias, "Asistencias")
+        if not df_notas.empty:
+            escribir_dataframe_en_hoja(wb, df_notas, "Notas")
+
+        # Si al crear el archivo por primera vez quedó la hoja por defecto de openpyxl llamada 'Sheet', la quitamos
+        if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
+            wb.remove(wb["Sheet"])
+
+        # 3. Guardamos el libro completo desde openpyxl preservando todo su contenido original
+        output = io.BytesIO()
+        wb.save(output)
         content = output.getvalue()
         
-        # 3. Forzar una segunda verificación del SHA antes de enviar para evitar el error 422
+        # 4. Verificación de seguridad del SHA en tiempo real
         try:
             contents_verificar = repo.get_contents(DB_FILE, ref="main")
             sha = contents_verificar.sha
         except Exception:
             sha = None
 
-        # 4. Subir el archivo actualizado de vuelta a GitHub de forma segura
+        # 5. Enviamos el archivo completo actualizado a GitHub
         if sha:
             repo.update_file(
                 path=DB_FILE,
-                message="🤖 Actualización segura de hojas (Preservando estructura original)",
+                message="🤖 Actualización nativa de celdas (Preservando el 100% de hojas originales)",
                 content=content,
-                sha=sha,  # Aquí ya va completamente blindado el SHA obligatorio
+                sha=sha,
                 branch="main"
             )
         else:
             repo.create_file(
                 path=DB_FILE,
-                message="🤖 Creación inicial del archivo estructurado",
+                message="🤖 Creación inicial segura del archivo maestro",
                 content=content,
                 branch="main"
             )
-        st.success("🔄 ¡Datos sincronizados de forma segura! Las hojas no utilizadas permanecen intactas.")
+        st.success("🔄 ¡Datos sincronizados! El resto de tus hojas originales han sido preservadas intactas.")
     except Exception as e:
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
-def obtener_instructores_y_contraseñas():
-    """Lee los instructores (Columna A) y sus contraseñas (Columna B)"""
-    dict_usuarios = {}
-    lista_instructores = []
-    
-    if os.path.exists(DB_FILE):
-        try:
-            df_inst = pd.read_excel(DB_FILE, sheet_name="Listado de instructores", header=None)
-            for idx, row in df_inst.iterrows():
-                nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
-                password = str(row[1]).strip() if df_inst.shape[1] > 1 and pd.notna(row[1]) else "SENA2026"
-                
-                if nombre.upper() != "INSTRUCTOR" and nombre != "" and nombre.upper() != "NAN":
-                    dict_usuarios[nombre] = password
-                    lista_instructores.append(nombre)
-                    
-            return sorted(lista_instructores), dict_usuarios
-        except Exception:
-            return ["Falta hoja 'Listado de instructores'"], {}
-            
-    return ["No Detectado"], {}
-
 def cargar_datos():
     """Carga y procesa el listado de aprendices desde la hoja correspondiente de forma segura"""
     if os.path.exists(DB_FILE):
