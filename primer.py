@@ -30,14 +30,20 @@ if enviado:
         try:
             st.cache_resource.clear()
             
-            # 1. Cargar el diccionario desde Secrets de Streamlit
+            # 1. Cargar diccionario limpio desde los Secrets
             secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # 2. Sanitizar de forma segura la clave privada en memoria RAM
+            # 2. Reconstrucción estricta de saltos de línea PEM en memoria RAM
             if "private_key" in secret_dict:
-                pk = secret_dict["private_key"]
-                # Limpiar retornos de carro de Windows (\r) y barras de escape diagonales literales
-                pk = pk.replace("\r", "").replace("\\n", "\n")
+                pk = str(secret_dict["private_key"]).strip()
+                
+                # Reemplazar secuencias de escape de texto a saltos reales del sistema
+                pk = pk.replace("\\n", "\n")
+                
+                # Forzar un único salto de línea estándar al final si hiciera falta
+                if not pk.endswith("\n"):
+                    pk += "\n"
+                    
                 secret_dict["private_key"] = pk
 
             scopes = [
@@ -45,11 +51,11 @@ if enviado:
                 "https://www.googleapis.com/auth/drive"
             ]
             
-            # Autenticación directa utilizando las credenciales seguras
+            # Autenticación segura
             credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
             client = gspread.authorize(credentials)
             
-            # Conexión a la hoja de cálculo
+            # Conexión directa a la hoja de cálculo
             spreadsheet = client.open_by_key(SPREADSHEET_KEY)
             worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
             
