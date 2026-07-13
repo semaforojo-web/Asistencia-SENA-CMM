@@ -4,3 +4,4 @@ openpyxl
 PyGithub
 st-gsheets-connection
 gspread
+google-auth
