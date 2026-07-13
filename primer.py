@@ -39,14 +39,14 @@ if enviado:
             base_url = url_limpia.split("/edit")[0]
             csv_url = f"{base_url}/export?format=csv&gid={GID_HOJA}"
             
-            # 3. Descargar la cuadrícula por medio de Pandas usando el GID numérico
-            df = pd.read_csv(csv_url, header=None)
+            # 3. Descargar la cuadrícula por medio de Pandas indicando que la fila 0 son los encabezados (header=0)
+            df = pd.read_csv(csv_url, header=0)
             
             # Asegurar la existencia de las columnas de destino T, U, V, W (23 columnas en total)
             while len(df.columns) < 23:
                 df[len(df.columns)] = ""
             
-            # Mapeo exacto por posiciones físicas (Índices basados en 0):
+            # Mapeo exacto por posiciones físicas basándose en el DataFrame (0-indexed desde los datos):
             # Columna L (Número de documento) = Índice 11
             # Columnas de destino: T = 19, U = 20, V = 21, W = 22
             col_L = 11
@@ -58,11 +58,8 @@ if enviado:
             coincidencia_encontrada = False
             documento_limpio = str(documento).strip()
             
-            # 4. Recorrer las filas buscando la coincidencia del documento
+            # 4. Recorrer las filas buscando la coincidencia del documento (aquí ya no incluimos el encabezado como dato)
             for idx, row in df.iterrows():
-                if idx == 0:
-                    continue  # Ignorar los títulos de las columnas
-                    
                 val_L = row.iloc[col_L]
                 
                 if pd.notna(val_L):
@@ -80,8 +77,8 @@ if enviado:
             if coincidencia_encontrada:
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 
-                # Usamos los nombres de parámetros correctos aceptados por la librería de Streamlit
-                conn.update(spreadsheet=url_limpia, worksheet=SHEET_NAME, data=df, headers=False)
+                # Eliminamos el parámetro inválido 'headers=False' y especificamos la hoja correcta usando 'worksheet'
+                conn.update(spreadsheet=url_limpia, worksheet=SHEET_NAME, data=df)
                 st.success(f"¡Registro guardado exitosamente en Google Sheets para el documento {documento}!")
             else:
                 st.warning(f"El número de documento '{documento}' no se encontró en la columna L de la lista.")
