@@ -30,14 +30,21 @@ if enviado:
         try:
             st.cache_resource.clear()
             
-            # Procesamiento profundo de credenciales
+            # 1. Obtener copia limpia de las credenciales
             secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # Sanear de forma absoluta los saltos de línea de la clave privada
+            # 2. SANEAMIENTO PROFUNDO DE LA CLAVE PRIVADA (Evita el error de archivo PEM)
             if "private_key" in secret_dict:
                 pk = secret_dict["private_key"]
-                pk = pk.replace("\\n", "\n").replace("\\\\n", "\n").strip()
-                secret_dict["private_key"] = pk
+                
+                # Eliminar barras inclinadas duplicadas si Streamlit las guardó como texto plano
+                pk = pk.replace("\\n", "\n").replace("\\\\n", "\n")
+                
+                # Quitar espacios en blanco accidentales al inicio/final de cada línea interna
+                lineas_limpias = [linea.strip() for linea in pk.split("\n") if linea.strip()]
+                pk_corregida = "\n".join(lineas_limpias)
+                
+                secret_dict["private_key"] = pk_corregida
 
             scopes = [
                 "https://www.googleapis.com/auth/spreadsheets",
@@ -47,7 +54,7 @@ if enviado:
             credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
             client = gspread.authorize(credentials)
             
-            # Intentar conexión directa
+            # Conexión directa
             spreadsheet = client.open_by_key(SPREADSHEET_KEY)
             worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
             
