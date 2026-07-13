@@ -48,16 +48,24 @@ if enviado:
                 
                 coincidencia_encontrada = False
                 
-                # Buscar en la columna L
-                for row in range(2, sheet.max_row + 1):
-                    val_L = sheet.cell(row=row, column=col_L).value
-                    
-                    if val_L is not None and str(val_L).strip() == str(documento):
-                        sheet.cell(row=row, column=col_T, value=fecha_hora_local)
-                        sheet.cell(row=row, column=col_U, value=str(documento))
-                        sheet.cell(row=row, column=col_V, value=correo)
-                        sheet.cell(row=row, column=col_W, value=celular)
-                        coincidencia_encontrada = True
+                # ... (mantén el resto del código igual)
+
+# Buscar en la columna L
+for row in range(2, sheet.max_row + 1):
+    val_L = sheet.cell(row=row, column=col_L).value
+    
+    if val_L is not None:
+        # Limpiamos el valor de Excel: si tiene .0 (decimal), se lo quitamos y lo volvemos texto limpio
+        val_L_str = str(val_L).split('.')[0].strip()
+        documento_limpio = str(documento).strip()
+        
+        if val_L_str == documento_limpio:
+            sheet.cell(row=row, column=col_T, value=fecha_hora_local)
+            sheet.cell(row=row, column=col_U, value=documento_limpio)
+            sheet.cell(row=row, column=col_V, value=correo)
+            sheet.cell(row=row, column=col_W, value=celular)
+            coincidencia_encontrada = True
+
                 
                 if coincidencia_encontrada:
                     wb.save(EXCEL_FILE)
