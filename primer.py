@@ -36,10 +36,10 @@ if enviado:
             # 2. Inicializar la conexión con tus Secrets de la Service Account
             conn = st.connection("gsheets", type=GSheetsConnection)
             
-            # 3. Acceder al cliente nativo de la API (gspread) para evitar la construcción de URLs propensas a errores
-            client = conn._client
+            # 3. Acceder al cliente de la API usando la propiedad pública oficial
+            client = conn.client
             
-            # Abrir el libro y la pestaña por su nombre exacto usando la API oficial
+            # Abrir el libro y la pestaña por su nombre exacto usando la API oficial de Google
             spreadsheet = client.open_by_url(URL_GOOGLE_SHEETS)
             worksheet = spreadsheet.worksheet(SHEET_NAME)
             
@@ -91,9 +91,9 @@ if enviado:
                         nuevos_encabezados = list(df.columns)
                         nuevos_datos = [nuevos_encabezados] + df.values.tolist()
                         
-                        # Limpiar la hoja vieja y escribir la matriz nueva de un solo golpe (Operación CRUD Atómica)
+                        # Limpiar la hoja vieja y escribir la matriz nueva usando la API oficial sin URLs
                         worksheet.clear()
-                        worksheet.update('A1', nuevos_datos)
+                        worksheet.update(range_name='A1', values=nuevos_datos)
                         
                         st.success(f"¡Registro guardado exitosamente en Google Sheets para el documento {documento}!")
                     else:
