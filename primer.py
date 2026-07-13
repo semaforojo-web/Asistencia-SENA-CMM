@@ -34,18 +34,20 @@ if enviado:
             # 1. Copia de credenciales base
             secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # 2. DECODIFICACIÓN INMUNE A ERRORES DE PEM
+            # 2. DECODIFICACIÓN ESTRICTA EN FORMATO ASCII
             if "private_key_b64" in secret_dict:
-                # Decodificar el texto puro de Base64 directamente en memoria
-                decoded_bytes = base64.b64decode(secret_dict["private_key_b64"])
-                private_key_decoded = decoded_bytes.decode("utf-8")
+                # Forzar la decodificación ignorando caracteres no-ASCII basura
+                b64_string = str(secret_dict["private_key_b64"]).strip()
+                decoded_bytes = base64.b64decode(b64_string)
                 
-                # Saneamiento de secuencias literales de escape si existieran
+                # Convertir a string de python usando ascii estricto
+                private_key_decoded = decoded_bytes.decode("ascii", errors="ignore")
+                
+                # Normalizar los saltos de línea requeridos por el formato PEM
                 private_key_clean = private_key_decoded.replace("\\n", "\n")
                 
-                # Adjuntar la clave limpia al diccionario de autenticación
+                # Adjuntar al diccionario de credenciales
                 secret_dict["private_key"] = private_key_clean
-                # Eliminar la clave b64 para que no confunda a la API de Google
                 del secret_dict["private_key_b64"]
 
             scopes = [
