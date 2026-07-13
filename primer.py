@@ -3,7 +3,6 @@ from datetime import datetime
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-import base64
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -31,38 +30,26 @@ if enviado:
         try:
             st.cache_resource.clear()
             
-            # 1. Copia de credenciales base
+            # 1. Cargar el diccionario desde Secrets de Streamlit
             secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # 2. DECODIFICACIÓN ESTRICTA CON CONTROL DE PADDING AUTOMÁTICO
-            if "private_key_b64" in secret_dict:
-                b64_string = str(secret_dict["private_key_b64"]).strip()
-                
-                # CORRECCIÓN DE PADDING: Asegurar que la longitud sea múltiplo de 4
-                remolque = len(b64_string) % 4
-                if remolque > 0:
-                    b64_string += "=" * (4 - remolque)
-                
-                # Convertir de Base64 a bytes y luego a texto ASCII limpio
-                decoded_bytes = base64.b64decode(b64_string)
-                private_key_decoded = decoded_bytes.decode("ascii", errors="ignore")
-                
-                # Normalizar saltos de línea para el formato PEM
-                private_key_clean = private_key_decoded.replace("\\n", "\n")
-                
-                # Asignar la clave corregida al diccionario
-                secret_dict["private_key"] = private_key_clean
-                del secret_dict["private_key_b64"]
+            # 2. Sanitizar de forma segura la clave privada en memoria RAM
+            if "private_key" in secret_dict:
+                pk = secret_dict["private_key"]
+                # Limpiar retornos de carro de Windows (\r) y barras de escape diagonales literales
+                pk = pk.replace("\r", "").replace("\\n", "\n")
+                secret_dict["private_key"] = pk
 
             scopes = [
                 "https://www.googleapis.com/auth/spreadsheets",
                 "https://www.googleapis.com/auth/drive"
             ]
             
+            # Autenticación directa utilizando las credenciales seguras
             credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
             client = gspread.authorize(credentials)
             
-            # Conexión directa
+            # Conexión a la hoja de cálculo
             spreadsheet = client.open_by_key(SPREADSHEET_KEY)
             worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
             
