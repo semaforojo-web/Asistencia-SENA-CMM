@@ -33,13 +33,18 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # 2. Inicializar la conexión con tus Secrets de la Service Account
-            conn = st.connection("gsheets", type=GSheetsConnection)
+            # 2. SE FORZA LA CONEXIÓN PRIVADA: Pasamos los Secrets directamente para asegurar que use la Service Account
+            # Esto evita que use el cliente público anónimo por defecto
+            conn = st.connection(
+                "gsheets", 
+                type=GSheetsConnection, 
+                credentials=st.secrets["connections"]["gsheets"]["service_account"]
+            )
             
-            # 3. Acceder al cliente de la API usando la propiedad pública oficial
+            # 3. Acceder al cliente de la API con los permisos ya otorgados y validados
             client = conn.client
             
-            # Abrir el libro y la pestaña por su nombre exacto usando la API oficial de Google
+            # Abrir el libro y la pestaña usando la API oficial autenticada
             spreadsheet = client.open_by_url(URL_GOOGLE_SHEETS)
             worksheet = spreadsheet.worksheet(SHEET_NAME)
             
@@ -91,7 +96,7 @@ if enviado:
                         nuevos_encabezados = list(df.columns)
                         nuevos_datos = [nuevos_encabezados] + df.values.tolist()
                         
-                        # Limpiar la hoja vieja y escribir la matriz nueva usando la API oficial sin URLs
+                        # Limpiar la hoja vieja y escribir la matriz nueva de forma autenticada
                         worksheet.clear()
                         worksheet.update(range_name='A1', values=nuevos_datos)
                         
