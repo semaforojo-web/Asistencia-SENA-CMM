@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import urllib.parse
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -9,7 +10,7 @@ st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 st.title("Formulario de Asistencia / Actualización")
 st.write("Ingrese los datos solicitados para registrar su asistencia.")
 
-# ⚠️ ENLACE DIRECTO A TU GOOGLE SHEETS
+# URL de tu Google Sheets y nombre de la hoja
 URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
 SHEET_NAME = "Listado de aprendices"
 
@@ -33,12 +34,17 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # Conectar con Google Sheets utilizando la extensión de Streamlit
-            conn = st.connection("gsheets", type=GSheetsConnection)
+            # 2. Limpiar la URL base y codificar el nombre de la hoja para internet
+            url_limpia = URL_GOOGLE_SHEETS.strip().replace(" ", "")
+            base_url = url_limpia.split("/edit")[0]
+            nombre_hoja_codificado = urllib.parse.quote(SHEET_NAME)
             
-            # Leer los datos de la nube en tiempo real (ttl=0 obliga a traer lo último guardado)
-            # Usamos header=None para tratar la hoja como una cuadrícula pura por índices de posición
-            df = conn.read(spreadsheet=URL_GOOGLE_SHEETS, sheet=SHEET_NAME, ttl=0, header=None)
+            # Construir la URL de exportación directa en formato CSV
+            csv_url = f"{base_url}/export?format=csv&sheet={nombre_hoja_codificado}"
+            
+            # 3. Leer la hoja de Google Sheets de forma nativa e infalible (evitando el bug de conn.read)
+            # Usamos header=None para procesar el Excel como una cuadrícula pura por índices de posición
+            df = pd.read_csv(csv_url, header=None)
             
             # Asegurar la existencia de las columnas de destino T, U, V, W (23 columnas en total)
             while len(df.columns) < 23:
@@ -55,7 +61,7 @@ if enviado:
             
             coincidencia_encontrada = False
             
-            # Recorrer las filas de la cuadrícula (empezando desde el índice 1 para ignorar encabezados)
+            # 4. Recorrer las filas de la cuadrícula (empezando desde el índice 1 para ignorar encabezados)
             for idx, row in df.iterrows():
                 if idx == 0:
                     continue
@@ -67,7 +73,7 @@ if enviado:
                     val_L_str = str(val_L).split('.')[0].strip()
                     documento_limpio = str(documento).strip()
                     
-                    # Comparación idéntica a la que te funcionó
+                    # Comparación idéntica
                     if val_L_str == documento_limpio:
                         df.iat[idx, col_T] = fecha_hora_local
                         df.iat[idx, col_U] = documento_limpio
@@ -75,10 +81,13 @@ if enviado:
                         df.iat[idx, col_W] = celular
                         coincidencia_encontrada = True
             
-            # 3. Guardar cambios directamente en la nube o reportar error
+            # 5. Guardar cambios directamente en la nube si hubo éxito
             if coincidencia_encontrada:
-                # Enviamos el dataframe modificado directo a Google Sheets
-                conn.update(spreadsheet=URL_GOOGLE_SHEETS, sheet=SHEET_NAME, data=df, headers=False)
+                # Inicializar la conexión solo para empujar los datos actualizados
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                
+                # Enviamos el dataframe modificado directo a Google Sheets usando la URL limpia
+                conn.update(spreadsheet=url_limpia, sheet=SHEET_NAME, data=df, headers=False)
                 st.success(f"¡Registro guardado exitosamente en Google Sheets para el documento {documento}!")
             else:
                 st.warning(f"El número de documento '{documento}' no se encontró en la lista de aprendices.")
