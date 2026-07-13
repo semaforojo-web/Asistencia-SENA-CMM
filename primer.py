@@ -28,81 +28,78 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
+            # Forzar limpieza absoluta de la caché interna del servidor de Streamlit
             st.cache_resource.clear()
             
-            # 1. Cargar diccionario limpio desde los Secrets
-            secret_dict = dict(st.secrets["gspread_credentials"])
-            
-            # 2. Reconstrucción estricta de saltos de línea PEM en memoria RAM
-            if "private_key" in secret_dict:
-                pk = str(secret_dict["private_key"]).strip()
-                
-                # Reemplazar secuencias de escape de texto a saltos reales del sistema
-                pk = pk.replace("\\n", "\n")
-                
-                # Forzar un único salto de línea estándar al final si hiciera falta
-                if not pk.endswith("\n"):
-                    pk += "\n"
-                    
-                secret_dict["private_key"] = pk
-
-            scopes = [
-                "https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/drive"
-            ]
-            
-            # Autenticación segura
-            credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
-            client = gspread.authorize(credentials)
-            
-            # Conexión directa a la hoja de cálculo
-            spreadsheet = client.open_by_key(SPREADSHEET_KEY)
-            worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
-            
-            if worksheet is None:
-                st.error(f"No se encontró la hoja específica con el ID {SHEET_GID}.")
+            # 1. Obtener la configuración base desde Secrets
+            if "gspread_credentials" not in st.secrets or "LLAVE_SECRETA_GOOGLE" not in st.secrets:
+                st.error("Faltan las credenciales de configuración en los Secrets de Streamlit.")
             else:
-                all_values = worksheet.get_all_values()
+                secret_dict = dict(st.secrets["gspread_credentials"])
                 
-                if not all_values:
-                    st.error("La hoja de cálculo está vacía.")
+                # 2. Inyectar la llave limpia desde la variable independiente
+                raw_key = str(st.secrets["LLAVE_SECRETA_GOOGLE"]).strip()
+                clean_key = raw_key.replace("\\n", "\n")
+                
+                # Adjuntar al diccionario final
+                secret_dict["private_key"] = clean_key
+
+                scopes = [
+                    "https://www.googleapis.com/auth/spreadsheets",
+                    "https://www.googleapis.com/auth/drive"
+                ]
+                
+                # Conexión directa usando la estructura limpia en memoria
+                credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+                client = gspread.authorize(credentials)
+                
+                spreadsheet = client.open_by_key(SPREADSHEET_KEY)
+                worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
+                
+                if worksheet is None:
+                    st.error(f"No se encontró la hoja específica con el ID {SHEET_GID}.")
                 else:
-                    df = pd.DataFrame(all_values[1:], columns=all_values[0])
-                    df.columns = df.columns.str.strip().str.upper()
+                    all_values = worksheet.get_all_values()
                     
-                    COL_BUSQUEDA = "NUMERO_DOCUMENTO"
-                    
-                    if COL_BUSQUEDA not in df.columns:
-                        st.error(f"No se encontró la columna '{COL_BUSQUEDA}' en el archivo.")
+                    if not all_values:
+                        st.error("La hoja de cálculo está vacía.")
                     else:
-                        columnas_requeridas = ['FECHA_REGISTRO', 'DOC_CONFIRMADO', 'CORREO_REGISTRO', 'CELULAR_REGISTRO']
-                        for col in columnas_requeridas:
-                            if col not in df.columns:
-                                df[col] = ""
+                        df = pd.DataFrame(all_values[1:], columns=all_values[0])
+                        df.columns = df.columns.str.strip().str.upper()
                         
-                        coincidencia_encontrada = False
-                        documento_limpio = str(documento).strip()
+                        COL_BUSQUEDA = "NUMERO_DOCUMENTO"
                         
-                        for idx, row in df.iterrows():
-                            val_documento = row[COL_BUSQUEDA]
-                            if val_documento:
-                                val_doc_str = str(val_documento).split('.')[0].strip()
-                                if val_doc_str == documento_limpio:
-                                    df.at[idx, 'FECHA_REGISTRO'] = fecha_hora_local
-                                    df.at[idx, 'DOC_CONFIRMADO'] = documento_limpio
-                                    df.at[idx, 'CORREO_REGISTRO'] = correo
-                                    df.at[idx, 'CELULAR_REGISTRO'] = celular
-                                    coincidencia_encontrada = True
-                        
-                        if coincidencia_encontrada:
-                            nuevos_encabezados = list(df.columns)
-                            nuevos_datos = [nuevos_encabezados] + df.values.tolist()
-                            
-                            worksheet.clear()
-                            worksheet.update(range_name='A1', values=nuevos_datos)
-                            st.success(f"¡Registro guardado exitosamente para el documento {documento}!")
+                        if COL_BUSQUEDA not in df.columns:
+                            st.error(f"No se encontró la columna '{COL_BUSQUEDA}' en el archivo.")
                         else:
-                            st.warning(f"El documento '{documento}' no se encontró en la lista.")
+                            columnas_requeridas = ['FECHA_REGISTRO', 'DOC_CONFIRMADO', 'CORREO_REGISTRO', 'CELULAR_REGISTRO']
+                            for col in columnas_requeridas:
+                                if col not in df.columns:
+                                    df[col] = ""
                             
+                            coincidencia_encontrada = False
+                            documento_limpio = str(documento).strip()
+                            
+                            for idx, row in df.iterrows():
+                                val_documento = row[COL_BUSQUEDA]
+                                if val_documento:
+                                    val_doc_str = str(val_documento).split('.')[0].strip()
+                                    if val_doc_str == documento_limpio:
+                                        df.at[idx, 'FECHA_REGISTRO'] = fecha_hora_local
+                                        df.at[idx, 'DOC_CONFIRMADO'] = documento_limpio
+                                        df.at[idx, 'CORREO_REGISTRO'] = correo
+                                        df.at[idx, 'CELULAR_REGISTRO'] = celular
+                                        coincidencia_encontrada = True
+                            
+                            if coincidencia_encontrada:
+                                nuevos_encabezados = list(df.columns)
+                                nuevos_datos = [nuevos_encabezados] + df.values.tolist()
+                                
+                                worksheet.clear()
+                                worksheet.update(range_name='A1', values=nuevos_datos)
+                                st.success(f"¡Registro guardado exitosamente para el documento {documento}!")
+                            else:
+                                st.warning(f"El documento '{documento}' no se encontró en la lista.")
+                                
         except Exception as e:
             st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {str(e) if str(e) else type(e).__name__}")
