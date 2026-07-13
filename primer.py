@@ -34,14 +34,17 @@ if enviado:
         
         try:
             # 2. AUTENTICACIÓN OFICIAL DIRECTA
-            # Extraemos el diccionario del Service Account guardado en Secrets como un diccionario puro de Python
-            import json
-            secret_dict = json.loads(st.secrets["connections"]["gsheets"]["service_account"])
+            # Leemos las credenciales directamente como un diccionario nativo de Streamlit Secrets
+            secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # Conectamos usando gspread con las credenciales explícitas del diccionario
+            # gspread necesita que la llave privada procese correctamente los saltos de línea (\n)
+            if "private_key" in secret_dict:
+                secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
+            
+            # Conectamos usando gspread
             client = gspread.service_account_from_dict(secret_dict)
             
-            # 3. Abrir el libro y la pestaña usando la API oficial autenticada de Google
+            # 3. Abrir el libro y la pestaña usando la API oficial
             spreadsheet = client.open_by_url(URL_GOOGLE_SHEETS)
             worksheet = spreadsheet.worksheet(SHEET_NAME)
             
@@ -51,19 +54,16 @@ if enviado:
             if not all_values:
                 st.error("El archivo de Google Sheets está completamente vacío.")
             else:
-                # Convertir a DataFrame. La primera fila se toma como encabezado real
+                # Convertir a DataFrame
                 df = pd.DataFrame(all_values[1:], columns=all_values[0])
-                
-                # Normalizar nombres de columnas para la búsqueda (quitar espacios y pasar a mayúsculas)
                 df.columns = df.columns.str.strip().str.upper()
                 
                 COL_BUSQUEDA = "NUMERO_DOCUMENTO"
                 
                 if COL_BUSQUEDA not in df.columns:
                     st.error(f"Error técnico: No se encontró la columna '{COL_BUSQUEDA}' en el archivo.")
-                    st.info(f"Columnas detectadas en tu archivo: {list(df.columns)}")
                 else:
-                    # 5. Asegurar las columnas de destino en mayúsculas si no existen en el DataFrame
+                    # 5. Asegurar las columnas de destino
                     columnas_requeridas = ['FECHA_REGISTRO', 'DOC_CONFIRMADO', 'CORREO_REGISTRO', 'CELULAR_REGISTRO']
                     for col in columnas_requeridas:
                         if col not in df.columns:
@@ -72,14 +72,11 @@ if enviado:
                     coincidencia_encontrada = False
                     documento_limpio = str(documento).strip()
                     
-                    # 6. Buscar el aprendiz recorriendo las filas
+                    # 6. Buscar el aprendiz
                     for idx, row in df.iterrows():
                         val_documento = row[COL_BUSQUEDA]
-                        
                         if val_documento:
-                            # Limpiar posibles formatos numéricos (.0)
                             val_doc_str = str(val_documento).split('.')[0].strip()
-                            
                             if val_doc_str == documento_limpio:
                                 df.at[idx, 'FECHA_REGISTRO'] = fecha_hora_local
                                 df.at[idx, 'DOC_CONFIRMADO'] = documento_limpio
@@ -87,13 +84,11 @@ if enviado:
                                 df.at[idx, 'CELULAR_REGISTRO'] = celular
                                 coincidencia_encontrada = True
                     
-                    # 7. Si se actualizó el DataFrame, lo guardamos en la hoja de cálculo
+                    # 7. Guardar en la hoja de cálculo
                     if coincidencia_encontrada:
-                        # Reconstruir la matriz completa incluyendo los encabezados originales corregidos
                         nuevos_encabezados = list(df.columns)
                         nuevos_datos = [nuevos_encabezados] + df.values.tolist()
                         
-                        # Limpiar la hoja vieja y escribir la matriz nueva usando gspread sin interferencias de Streamlit
                         worksheet.clear()
                         worksheet.update(range_name='A1', values=nuevos_datos)
                         
@@ -102,4 +97,5 @@ if enviado:
                         st.warning(f"El número de documento '{documento}' no se encontró en la lista de aprendices.")
                         
         except Exception as e:
-            st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {e}")
+            # Si ocurre un error, ahora sí nos forzará a ver un mensaje descriptivo en texto plano
+            st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {str(e) if str(e) else type(e).__name__}")
