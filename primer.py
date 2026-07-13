@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import urllib.parse
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -10,7 +9,7 @@ st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 st.title("Formulario de Asistencia / Actualización")
 st.write("Ingrese los datos solicitados para registrar su asistencia.")
 
-# URL de tu Google Sheets y nombre de la hoja
+# URL de tu Google Sheets
 URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
 SHEET_NAME = "Listado de aprendices"
 
@@ -34,23 +33,18 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # 2. Limpiar la URL base y codificar el nombre de la hoja para internet
-            url_limpia = URL_GOOGLE_SHEETS.strip().replace(" ", "")
-            base_url = url_limpia.split("/edit")[0]
-            nombre_hoja_codificado = urllib.parse.quote(SHEET_NAME)
+            # 2. Inicializar la conexión oficial a Google Sheets
+            conn = st.connection("gsheets", type=GSheetsConnection)
             
-            # Construir la URL de exportación directa en formato CSV
-            csv_url = f"{base_url}/export?format=csv&sheet={nombre_hoja_codificado}"
-            
-            # 3. Leer la hoja de Google Sheets de forma nativa e infalible (evitando el bug de conn.read)
-            # Usamos header=None para procesar el Excel como una cuadrícula pura por índices de posición
-            df = pd.read_csv(csv_url, header=None)
+            # Leer usando el método correcto de la librería para evitar problemas de parámetros de red
+            # Cargamos la hoja especificando 'worksheet' en lugar de 'sheet' (que causaba el bug previo)
+            df = conn.read(spreadsheet=URL_GOOGLE_SHEETS, worksheet=SHEET_NAME, ttl=0, header=None)
             
             # Asegurar la existencia de las columnas de destino T, U, V, W (23 columnas en total)
             while len(df.columns) < 23:
                 df[len(df.columns)] = ""
             
-            # Mapeo exacto de las columnas solicitadas por índice de posición (0-indexed):
+            # Mapeo exacto por posiciones físicas (Índices basados en 0):
             # Columna L (Número de documento) = Índice 11
             # Columnas de destino: T = 19, U = 20, V = 21, W = 22
             col_L = 11
@@ -60,20 +54,20 @@ if enviado:
             col_W = 22
             
             coincidencia_encontrada = False
+            documento_limpio = str(documento).strip()
             
-            # 4. Recorrer las filas de la cuadrícula (empezando desde el índice 1 para ignorar encabezados)
+            # 3. Recorrer las filas de la cuadrícula real descargada de la nube
             for idx, row in df.iterrows():
                 if idx == 0:
-                    continue
+                    continue  # Ignorar la fila de títulos
                     
                 val_L = row.iloc[col_L]
                 
                 if pd.notna(val_L):
-                    # Convertimos a string y dividimos en el punto para remover el ".0" de formato flotante
+                    # Convertimos a texto quitando decimales ocultos (.0)
                     val_L_str = str(val_L).split('.')[0].strip()
-                    documento_limpio = str(documento).strip()
                     
-                    # Comparación idéntica
+                    # Comparación exacta de texto a texto
                     if val_L_str == documento_limpio:
                         df.iat[idx, col_T] = fecha_hora_local
                         df.iat[idx, col_U] = documento_limpio
@@ -81,16 +75,13 @@ if enviado:
                         df.iat[idx, col_W] = celular
                         coincidencia_encontrada = True
             
-            # 5. Guardar cambios directamente en la nube si hubo éxito
+            # 4. Guardar cambios en la nube si fue hallado
             if coincidencia_encontrada:
-                # Inicializar la conexión solo para empujar los datos actualizados
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                
-                # Enviamos el dataframe modificado directo a Google Sheets usando la URL limpia
-                conn.update(spreadsheet=url_limpia, sheet=SHEET_NAME, data=df, headers=False)
+                # Enviamos los datos de vuelta apuntando a la hoja correcta
+                conn.update(spreadsheet=URL_GOOGLE_SHEETS, worksheet=SHEET_NAME, data=df, headers=False)
                 st.success(f"¡Registro guardado exitosamente en Google Sheets para el documento {documento}!")
             else:
-                st.warning(f"El número de documento '{documento}' no se encontró en la lista de aprendices.")
+                st.warning(f"El número de documento '{documento}' no se encontró en la columna L de la hoja '{SHEET_NAME}'.")
                 
         except Exception as e:
             st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {e}")
