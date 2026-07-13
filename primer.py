@@ -9,9 +9,9 @@ st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 st.title("Formulario de Asistencia / Actualización")
 st.write("Ingrese los datos solicitados para registrar su asistencia.")
 
-# URL de tu Google Sheets
 URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
-SHEET_NAME = "Listado de aprendices"
+
+GID_HOJA = 601595677 
 
 # --- Estructura del Formulario en la Web ---
 with st.form("formulario_asistencia", clear_on_submit=True):
@@ -33,12 +33,13 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # 2. Inicializar la conexión oficial a Google Sheets
-            conn = st.connection("gsheets", type=GSheetsConnection)
+            # 2. Limpiar y estructurar la URL de descarga directa usando el número GID libre de espacios
+            url_limpia = URL_GOOGLE_SHEETS.strip().replace(" ", "")
+            base_url = url_limpia.split("/edit")[0]
+            csv_url = f"{base_url}/export?format=csv&gid={GID_HOJA}"
             
-            # Leer usando el método correcto de la librería para evitar problemas de parámetros de red
-            # Cargamos la hoja especificando 'worksheet' en lugar de 'sheet' (que causaba el bug previo)
-            df = conn.read(spreadsheet=URL_GOOGLE_SHEETS, worksheet=SHEET_NAME, ttl=0, header=None)
+            # 3. Descargar la cuadrícula de datos usando el ID numérico exacto
+            df = pd.read_csv(csv_url, header=None)
             
             # Asegurar la existencia de las columnas de destino T, U, V, W (23 columnas en total)
             while len(df.columns) < 23:
@@ -56,18 +57,17 @@ if enviado:
             coincidencia_encontrada = False
             documento_limpio = str(documento).strip()
             
-            # 3. Recorrer las filas de la cuadrícula real descargada de la nube
+            # 4. Recorrer las filas buscando la coincidencia
             for idx, row in df.iterrows():
                 if idx == 0:
-                    continue  # Ignorar la fila de títulos
+                    continue  # Ignorar los títulos
                     
                 val_L = row.iloc[col_L]
                 
                 if pd.notna(val_L):
-                    # Convertimos a texto quitando decimales ocultos (.0)
+                    # Quitar decimales flotantes como el ".0"
                     val_L_str = str(val_L).split('.')[0].strip()
                     
-                    # Comparación exacta de texto a texto
                     if val_L_str == documento_limpio:
                         df.iat[idx, col_T] = fecha_hora_local
                         df.iat[idx, col_U] = documento_limpio
@@ -75,13 +75,14 @@ if enviado:
                         df.iat[idx, col_W] = celular
                         coincidencia_encontrada = True
             
-            # 4. Guardar cambios en la nube si fue hallado
+            # 5. Guardar los datos modificados directamente en la nube
             if coincidencia_encontrada:
-                # Enviamos los datos de vuelta apuntando a la hoja correcta
-                conn.update(spreadsheet=URL_GOOGLE_SHEETS, worksheet=SHEET_NAME, data=df, headers=False)
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                # Actualizamos usando la referencia limpia de red libre de caracteres especiales
+                conn.update(spreadsheet=url_limpia, spreadsheet_id=GID_HOJA, data=df, headers=False)
                 st.success(f"¡Registro guardado exitosamente en Google Sheets para el documento {documento}!")
             else:
-                st.warning(f"El número de documento '{documento}' no se encontró en la columna L de la hoja '{SHEET_NAME}'.")
+                st.warning(f"El número de documento '{documento}' no se encontró en la columna L de la lista.")
                 
         except Exception as e:
             st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {e}")
