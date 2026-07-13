@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 import pandas as pd
 import gspread
+from google.oauth2.service_account import Credentials
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -9,9 +10,9 @@ st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 st.title("Formulario de Asistencia / Actualización")
 st.write("Ingrese los datos solicitados para registrar su asistencia.")
 
-# ⚠️ CONFIGURACIÓN DIRECTA CON ID DE PESTAÑA SPECÍFICO
+# ⚠️ CONFIGURACIÓN DIRECTA CON ID DE PESTAÑA ESPECÍFICO
 URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
-SHEET_GID = 601595677  # Tu ID de hoja específico (Listado de Aprendices)
+SHEET_GID = 601595677  # ID de pestaña específico: Listado de Aprendices
 
 # --- Estructura del Formulario en la Web ---
 with st.form("formulario_asistencia", clear_on_submit=True):
@@ -31,18 +32,29 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # Autenticación oficial directa con los Secrets
+            # 1. Cargar las credenciales desde los Secrets
             secret_dict = dict(st.secrets["gspread_credentials"])
             
             if "private_key" in secret_dict:
                 secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
             
-            client = gspread.service_account_from_dict(secret_dict)
+            # 2. DEFINIR LOS ALCANCES (SCOPES) EXPLÍCITOS DE GOOGLE DRIVE Y SHEETS
+            # Esto obliga a Google a validar los permisos de lectura y escritura completos
+            scopes = [
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
             
-            # Abrir el libro principal "Reporte de Asistencia"
+            # 3. Crear las credenciales autorizadas con los alcances definidos
+            credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+            
+            # 4. Conectar el cliente de gspread usando el objeto de credenciales explícito
+            client = gspread.authorize(credentials)
+            
+            # 5. Abrir el libro principal "Reporte de Asistencia"
             spreadsheet = client.open_by_url(URL_GOOGLE_SHEETS)
             
-            # 🎯 CAMBIO CLAVE: Seleccionamos la hoja usando directamente el GID numérico
+            # Seleccionar la hoja usando directamente el GID numérico brindado
             worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
             
             if worksheet is None:
@@ -85,7 +97,7 @@ if enviado:
                                     df.at[idx, 'CELULAR_REGISTRO'] = celular
                                     coincidencia_encontrada = True
                         
-                        # Guardar cambios
+                        # Guardar cambios reconstruyendo la matriz
                         if coincidencia_encontrada:
                             nuevos_encabezados = list(df.columns)
                             nuevos_datos = [nuevos_encabezados] + df.values.tolist()
