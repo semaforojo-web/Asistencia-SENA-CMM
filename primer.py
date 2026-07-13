@@ -3,6 +3,7 @@ from datetime import datetime
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+import base64
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -30,26 +31,22 @@ if enviado:
         try:
             st.cache_resource.clear()
             
-            # 1. Obtener copia limpia de las credenciales
+            # 1. Copia de credenciales base
             secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # 2. SANEAMIENTO DEFINITIVO Y ENSAMBLADO DE LA CLAVE PRIVADA
-            if "private_key" in secret_dict:
-                pk = secret_dict["private_key"]
+            # 2. DECODIFICACIÓN INMUNE A ERRORES DE PEM
+            if "private_key_b64" in secret_dict:
+                # Decodificar el texto puro de Base64 directamente en memoria
+                decoded_bytes = base64.b64decode(secret_dict["private_key_b64"])
+                private_key_decoded = decoded_bytes.decode("utf-8")
                 
-                # Normalizar cualquier barra inclinada de texto plano
-                pk = pk.replace("\\n", "\n").replace("\\\\n", "\n")
+                # Saneamiento de secuencias literales de escape si existieran
+                private_key_clean = private_key_decoded.replace("\\n", "\n")
                 
-                # Extraer solo el contenido base de la clave removiendo los encabezados temporales
-                lineas = [linea.strip() for linea in pk.split("\n") if linea.strip()]
-                contenido_base = [l for l in lineas if "BEGIN PRIVATE KEY" not in l and "END PRIVATE KEY" not in l]
-                
-                # Unir todo el cuerpo en una sola línea continua sin espacios ni saltos rotos
-                cuerpo_llave = "".join(contenido_base).replace(" ", "")
-                
-                # Reconstruir la estructura PEM oficial perfectamente formateada
-                pk_corregida = f"-----BEGIN PRIVATE KEY-----\n{cuerpo_llave}\n-----END PRIVATE KEY-----\n"
-                secret_dict["private_key"] = pk_corregida
+                # Adjuntar la clave limpia al diccionario de autenticación
+                secret_dict["private_key"] = private_key_clean
+                # Eliminar la clave b64 para que no confunda a la API de Google
+                del secret_dict["private_key_b64"]
 
             scopes = [
                 "https://www.googleapis.com/auth/spreadsheets",
