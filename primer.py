@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
 import pandas as pd
+import urllib.parse
 
 # Configuración de la interfaz web
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -8,7 +9,7 @@ st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 st.title("Formulario de Asistencia / Actualización")
 st.write("Ingrese los datos solicitados para registrar su asistencia en tiempo real.")
 
-# ⚠️ PEGA AQUÍ TU URL REAL DE GOOGLE SHEETS ENTRE LAS COMILLAS
+# URL de tu Google Sheets
 URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
 
 # --- Estructura del Formulario en la Web ---
@@ -27,15 +28,18 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # 1. Limpiar la URL de espacios en blanco accidentales
+            # 1. Limpiar la URL base
             url_limpia = URL_GOOGLE_SHEETS.strip().replace(" ", "")
-            
-            # 2. Convertir la URL al formato de exportación CSV nativo de Google
-            nombre_hoja = "Listado de aprendices"
             base_url = url_limpia.split("/edit")[0]
-            csv_url = f"{base_url}/export?format=csv&sheet={nombre_hoja}"
             
-            # 3. Leer la hoja usando Pandas de forma nativa
+            # 2. NOMBRE DE LA HOJA CODIFICADO PARA URL (Cambia los espacios por %20 automáticamente)
+            nombre_hoja = "Listado de aprendices"
+            nombre_hoja_codificado = urllib.parse.quote(nombre_hoja)
+            
+            # Construir la URL de exportación segura
+            csv_url = f"{base_url}/export?format=csv&sheet={nombre_hoja_codificado}"
+            
+            # 3. Leer la hoja usando Pandas
             df = pd.read_csv(csv_url)
             
             # Asegurar que existan suficientes columnas para T, U, V, W (índices 19 a 22)
@@ -68,11 +72,11 @@ if enviado:
                         coincidencia_encontrada = True
             
             if coincidencia_encontrada:
-                # 5. Guardar los cambios usando la conexión de Streamlit
+                # 5. Guardar los cambios en Google Sheets
                 from streamlit_gsheets import GSheetsConnection
                 conn = st.connection("gsheets", type=GSheetsConnection)
                 
-                # Inyectamos los datos directo al update
+                # Inyectamos los datos directo al update con el nombre de hoja original
                 conn.update(spreadsheet=url_limpia, sheet=nombre_hoja, data=df)
                 st.success(f"¡Asistencia registrada con éxito en la nube para el documento {documento}!")
             else:
