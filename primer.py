@@ -34,19 +34,23 @@ if enviado:
             # 1. Copia de credenciales base
             secret_dict = dict(st.secrets["gspread_credentials"])
             
-            # 2. DECODIFICACIÓN ESTRICTA EN FORMATO ASCII
+            # 2. DECODIFICACIÓN ESTRICTA CON CONTROL DE PADDING AUTOMÁTICO
             if "private_key_b64" in secret_dict:
-                # Forzar la decodificación ignorando caracteres no-ASCII basura
                 b64_string = str(secret_dict["private_key_b64"]).strip()
-                decoded_bytes = base64.b64decode(b64_string)
                 
-                # Convertir a string de python usando ascii estricto
+                # CORRECCIÓN DE PADDING: Asegurar que la longitud sea múltiplo de 4
+                remolque = len(b64_string) % 4
+                if remolque > 0:
+                    b64_string += "=" * (4 - remolque)
+                
+                # Convertir de Base64 a bytes y luego a texto ASCII limpio
+                decoded_bytes = base64.b64decode(b64_string)
                 private_key_decoded = decoded_bytes.decode("ascii", errors="ignore")
                 
-                # Normalizar los saltos de línea requeridos por el formato PEM
+                # Normalizar saltos de línea para el formato PEM
                 private_key_clean = private_key_decoded.replace("\\n", "\n")
                 
-                # Adjuntar al diccionario de credenciales
+                # Asignar la clave corregida al diccionario
                 secret_dict["private_key"] = private_key_clean
                 del secret_dict["private_key_b64"]
 
