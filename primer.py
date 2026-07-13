@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import gspread
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -33,22 +33,19 @@ if enviado:
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # 2. SE FORZA LA CONEXIÓN PRIVADA: Pasamos los Secrets directamente para asegurar que use la Service Account
-            # Esto evita que use el cliente público anónimo por defecto
-            conn = st.connection(
-                "gsheets", 
-                type=GSheetsConnection, 
-                credentials=st.secrets["connections"]["gsheets"]["service_account"]
-            )
+            # 2. AUTENTICACIÓN OFICIAL DIRECTA
+            # Extraemos el diccionario del Service Account guardado en Secrets como un diccionario puro de Python
+            import json
+            secret_dict = json.loads(st.secrets["connections"]["gsheets"]["service_account"])
             
-            # 3. Acceder al cliente de la API con los permisos ya otorgados y validados
-            client = conn.client
+            # Conectamos usando gspread con las credenciales explícitas del diccionario
+            client = gspread.service_account_from_dict(secret_dict)
             
-            # Abrir el libro y la pestaña usando la API oficial autenticada
+            # 3. Abrir el libro y la pestaña usando la API oficial autenticada de Google
             spreadsheet = client.open_by_url(URL_GOOGLE_SHEETS)
             worksheet = spreadsheet.worksheet(SHEET_NAME)
             
-            # 4. Descargar todas las filas como una lista de listas de forma segura
+            # 4. Descargar todas las filas de forma segura
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -96,7 +93,7 @@ if enviado:
                         nuevos_encabezados = list(df.columns)
                         nuevos_datos = [nuevos_encabezados] + df.values.tolist()
                         
-                        # Limpiar la hoja vieja y escribir la matriz nueva de forma autenticada
+                        # Limpiar la hoja vieja y escribir la matriz nueva usando gspread sin interferencias de Streamlit
                         worksheet.clear()
                         worksheet.update(range_name='A1', values=nuevos_datos)
                         
