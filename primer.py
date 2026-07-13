@@ -1,8 +1,8 @@
 import streamlit as st
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
+import urllib.parse
 
 # Configuración de la interfaz web de la página
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
@@ -10,96 +10,88 @@ st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 st.title("Formulario de Asistencia / Actualización")
 st.write("Ingrese los datos solicitados para registrar su asistencia.")
 
-# Configuración mediante ID estable del documento
-SPREADSHEET_KEY = "1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g"
-SHEET_GID = 601595677  
+# URL de tu Google Sheets y nombre de la hoja
+URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
+SHEET_NAME = "Listado de aprendices"
 
-# --- Estructura del Formulario ---
+# --- Estructura del Formulario en la Web ---
 with st.form("formulario_asistencia", clear_on_submit=True):
     documento = st.text_input("Número de Documento:").strip()
     correo = st.text_input("Correo Electrónico:").strip()
     celular = st.text_input("Número de Celular:").strip()
+    
+    # Botón de envío
     enviado = st.form_submit_button("Guardar Registro")
 
+# --- Lógica de procesamiento al presionar el botón ---
 if enviado:
+    # 1. Validar que no existan campos vacíos
     if not documento or not correo or not celular:
         st.error("Todos los campos son obligatorios.")
+        
     else:
+        # Generar fecha y hora local del sistema
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # Forzar limpieza absoluta de la caché interna del servidor de Streamlit
-            st.cache_resource.clear()
+            # 2. Limpiar la URL base y codificar el nombre de la hoja para internet
+            url_limpia = URL_GOOGLE_SHEETS.strip().replace(" ", "")
+            base_url = url_limpia.split("/edit")[0]
+            nombre_hoja_codificado = urllib.parse.quote(SHEET_NAME)
             
-            # 1. Obtener la configuración base desde Secrets
-            if "gspread_credentials" not in st.secrets or "LLAVE_SECRETA_GOOGLE" not in st.secrets:
-                st.error("Faltan las credenciales de configuración en los Secrets de Streamlit.")
-            else:
-                secret_dict = dict(st.secrets["gspread_credentials"])
-                
-                # 2. Inyectar la llave limpia desde la variable independiente
-                raw_key = str(st.secrets["LLAVE_SECRETA_GOOGLE"]).strip()
-                clean_key = raw_key.replace("\\n", "\n")
-                
-                # Adjuntar al diccionario final
-                secret_dict["private_key"] = clean_key
-
-                scopes = [
-                    "https://www.googleapis.com/auth/spreadsheets",
-                    "https://www.googleapis.com/auth/drive"
-                ]
-                
-                # Conexión directa usando la estructura limpia en memoria
-                credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
-                client = gspread.authorize(credentials)
-                
-                spreadsheet = client.open_by_key(SPREADSHEET_KEY)
-                worksheet = spreadsheet.get_worksheet_by_id(SHEET_GID)
-                
-                if worksheet is None:
-                    st.error(f"No se encontró la hoja específica con el ID {SHEET_GID}.")
-                else:
-                    all_values = worksheet.get_all_values()
+            # Construir la URL de exportación directa en formato CSV
+            csv_url = f"{base_url}/export?format=csv&sheet={nombre_hoja_codificado}"
+            
+            # 3. Leer la hoja de Google Sheets de forma nativa e infalible (evitando el bug de conn.read)
+            # Usamos header=None para procesar el Excel como una cuadrícula pura por índices de posición
+            df = pd.read_csv(csv_url, header=None)
+            
+            # Asegurar la existencia de las columnas de destino T, U, V, W (23 columnas en total)
+            while len(df.columns) < 23:
+                df[len(df.columns)] = ""
+            
+            # Mapeo exacto de las columnas solicitadas por índice de posición (0-indexed):
+            # Columna L (Número de documento) = Índice 11
+            # Columnas de destino: T = 19, U = 20, V = 21, W = 22
+            col_L = 11
+            col_T = 19
+            col_U = 20
+            col_V = 21
+            col_W = 22
+            
+            coincidencia_encontrada = False
+            
+            # 4. Recorrer las filas de la cuadrícula (empezando desde el índice 1 para ignorar encabezados)
+            for idx, row in df.iterrows():
+                if idx == 0:
+                    continue
                     
-                    if not all_values:
-                        st.error("La hoja de cálculo está vacía.")
-                    else:
-                        df = pd.DataFrame(all_values[1:], columns=all_values[0])
-                        df.columns = df.columns.str.strip().str.upper()
-                        
-                        COL_BUSQUEDA = "NUMERO_DOCUMENTO"
-                        
-                        if COL_BUSQUEDA not in df.columns:
-                            st.error(f"No se encontró la columna '{COL_BUSQUEDA}' en el archivo.")
-                        else:
-                            columnas_requeridas = ['FECHA_REGISTRO', 'DOC_CONFIRMADO', 'CORREO_REGISTRO', 'CELULAR_REGISTRO']
-                            for col in columnas_requeridas:
-                                if col not in df.columns:
-                                    df[col] = ""
-                            
-                            coincidencia_encontrada = False
-                            documento_limpio = str(documento).strip()
-                            
-                            for idx, row in df.iterrows():
-                                val_documento = row[COL_BUSQUEDA]
-                                if val_documento:
-                                    val_doc_str = str(val_documento).split('.')[0].strip()
-                                    if val_doc_str == documento_limpio:
-                                        df.at[idx, 'FECHA_REGISTRO'] = fecha_hora_local
-                                        df.at[idx, 'DOC_CONFIRMADO'] = documento_limpio
-                                        df.at[idx, 'CORREO_REGISTRO'] = correo
-                                        df.at[idx, 'CELULAR_REGISTRO'] = celular
-                                        coincidencia_encontrada = True
-                            
-                            if coincidencia_encontrada:
-                                nuevos_encabezados = list(df.columns)
-                                nuevos_datos = [nuevos_encabezados] + df.values.tolist()
-                                
-                                worksheet.clear()
-                                worksheet.update(range_name='A1', values=nuevos_datos)
-                                st.success(f"¡Registro guardado exitosamente para el documento {documento}!")
-                            else:
-                                st.warning(f"El documento '{documento}' no se encontró en la lista.")
-                                
+                val_L = row.iloc[col_L]
+                
+                if pd.notna(val_L):
+                    # Convertimos a string y dividimos en el punto para remover el ".0" de formato flotante
+                    val_L_str = str(val_L).split('.')[0].strip()
+                    documento_limpio = str(documento).strip()
+                    
+                    # Comparación idéntica
+                    if val_L_str == documento_limpio:
+                        df.iat[idx, col_T] = fecha_hora_local
+                        df.iat[idx, col_U] = documento_limpio
+                        df.iat[idx, col_V] = correo
+                        df.iat[idx, col_W] = celular
+                        coincidencia_encontrada = True
+            
+            # 5. Guardar cambios directamente en la nube si hubo éxito
+            if coincidencia_encontrada:
+                # Inicializar la conexión solo para empujar los datos actualizados
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                
+                # Enviamos el dataframe modificado directo a Google Sheets usando la URL limpia
+                conn.update(spreadsheet=url_limpia, sheet=SHEET_NAME, data=df, headers=False)
+                st.success(f"¡Registro guardado exitosamente en Google Sheets para el documento {documento}!")
+            else:
+                st.warning(f"El número de documento '{documento}' no se encontró en la lista de aprendices.")
+                
         except Exception as e:
-            st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {str(e) if str(e) else type(e).__name__}")
+            st.error(f"Ocurrió un error técnico al procesar el archivo en la nube: {e}")
+            
