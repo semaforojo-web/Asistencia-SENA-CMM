@@ -1,17 +1,17 @@
 import streamlit as st
 from datetime import datetime
-import openpyxl
-import os
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-# Configuración de la interfaz web de la página
+# Configuración de la interfaz web
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 
-st.title("Formulario de Asistencia / Actualización")
-st.write("Ingrese los datos solicitados para registrar su asistencia.")
+st.title("Formulario de Asistencia / Actualización (Google Sheets)")
+st.write("Ingrese los datos solicitados para registrar su asistencia en tiempo real.")
 
-# Configuración del archivo Excel y la hoja destino
-EXCEL_FILE = "Reporte de Asistencia.xlsx"
-SHEET_NAME = "Listado de aprendices"
+# ⚠️ REEMPLAZA ESTA URL CON EL ENLACE QUE COPIASTE DE TU GOOGLE SHEETS
+# Asegúrate de mantener las comillas.
+URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/TU_ID_DE_DOCUMENTO_AQUÍ/edit?usp=sharing"
 
 # --- Estructura del Formulario en la Web ---
 with st.form("formulario_asistencia", clear_on_submit=True):
@@ -19,70 +19,62 @@ with st.form("formulario_asistencia", clear_on_submit=True):
     correo = st.text_input("Correo Electrónico:").strip()
     celular = st.text_input("Número de Celular:").strip()
     
-    # Botón de envío
     enviado = st.form_submit_button("Guardar Registro")
 
-# --- Lógica de procesamiento al presionar el botón ---
+# --- Lógica de procesamiento ---
 if enviado:
-    # 1. Validar que no existan campos vacíos
     if not documento or not correo or not celular:
         st.error("Todos los campos son obligatorios.")
-        
-    # 2. Validar que el archivo Excel esté en el servidor
-    elif not os.path.exists(EXCEL_FILE):
-        st.error(f"Error: No se encontró el archivo '{EXCEL_FILE}' en el repositorio.")
-        
     else:
-        # Generar fecha y hora local del sistema
         fecha_hora_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # Cargar el archivo Excel manteniendo estilos previos
-            wb = openpyxl.load_workbook(EXCEL_FILE)
+            # 1. Conectar con el Google Sheets utilizando st.connection
+            conn = st.connection("gsheets", type=GSheetsConnection)
             
-            if SHEET_NAME not in wb.sheetnames:
-                st.error(f"No se encontró la hoja '{SHEET_NAME}' dentro del archivo de Excel.")
-                wb.close()
-            else:
-                sheet = wb[SHEET_NAME]
+            # 2. Leer la hoja exacta "Listado de aprendices"
+            # Ponemos ttl=0 para que siempre traiga los datos más frescos de la nube
+            df = conn.read(spreadsheet=URL_GOOGLE_SHEETS, sheet="Listado de aprendices", ttl=0)
+            
+            # Nos aseguramos de rellenar las columnas si la hoja original es más corta
+            # Columnas requeridas en base a letras de Excel: L es columna 11 (0-indexed)
+            # T, U, V, W corresponden a los índices 19, 20, 21, 22
+            columnas_necesarias = 23
+            while len(df.columns) < columnas_necesarias:
+                df[f"Columna_{len(df.columns)}"] = ""
                 
-                # Mapeo exacto de las columnas solicitadas:
-                # Columna L (Original: Número de documento) = 12
-                # Columnas de destino: T = 20, U = 21, V = 22, W = 23
-                col_L = 12
-                col_T = 20
-                col_U = 21
-                col_V = 22
-                col_W = 23
+            col_L_idx = 11
+            col_T_idx = 19
+            col_U_idx = 20
+            col_V_idx = 21
+            col_W_idx = 22
+            
+            coincidencia_encontrada = False
+            documento_limpio = str(documento).strip()
+            
+            # 3. Buscar coincidencia en la columna L (index 11)
+            for idx, row in df.iterrows():
+                val_L = row.iloc[col_L_idx]
                 
-                coincidencia_encontrada = False
-                
-                # Recorrer las filas del Excel (desde la fila 2 para ignorar el encabezado)
-                for row in range(2, sheet.max_row + 1):
-                    val_L = sheet.cell(row=row, column=col_L).value
+                if pd.notna(val_L):
+                    # Limpieza estándar para evitar problemas de formato (.0 decimales)
+                    val_L_str = str(val_L).split('.')[0].strip()
                     
-                    if val_L is not None:
-                        # Convertimos a string y dividimos en el punto para remover el ".0" si Excel lo lee como flotante
-                        val_L_str = str(val_L).split('.')[0].strip()
-                        documento_limpio = str(documento).strip()
-                        
-                        # Comparación limpia de texto a texto
-                        if val_L_str == documento_limpio:
-                            sheet.cell(row=row, column=col_T, value=fecha_hora_local)
-                            sheet.cell(row=row, column=col_U, value=documento_limpio)
-                            sheet.cell(row=row, column=col_V, value=correo)
-                            sheet.cell(row=row, column=col_W, value=celular)
-                            coincidencia_encontrada = True
-                
-                # 3. Guardar cambios o reportar si el documento no existía
-                if coincidencia_encontrada:
-                    wb.save(EXCEL_FILE)
-                    st.success(f"¡Registro guardado exitosamente para el documento {documento}!")
-                else:
-                    st.warning(f"El número de documento '{documento}' no se encontró en la lista de aprendices.")
-                
-                wb.close()
+                    if val_L_str == documento_limpio:
+                        # Convertir la fila en lista modificable si pandas la bloquea
+                        df.iat[idx, col_T_idx] = fecha_hora_local
+                        df.iat[idx, col_U_idx] = documento_limpio
+                        df.iat[idx, col_V_idx] = correo
+                        df.iat[idx, col_W_idx] = celular
+                        coincidencia_encontrada = True
+            
+            # 4. Guardar los cambios directamente en la nube si fue encontrado
+            if coincidencia_encontrada:
+                # Actualizar la hoja de cálculo en la nube
+                conn.update(spreadsheet=URL_GOOGLE_SHEETS, sheet="Listado de aprendices", data=df)
+                st.success(f"¡Asistencia registrada con éxito en la nube para el documento {documento}!")
+            else:
+                st.warning(f"El número de documento '{documento}' no se encontró en la base de datos.")
                 
         except Exception as e:
-            st.error(f"Ocurrió un error técnico al procesar el archivo Excel: {e}")
-            
+            st.error(f"Error al conectar con Google Sheets: {e}")
