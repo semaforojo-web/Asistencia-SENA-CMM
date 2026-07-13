@@ -11,7 +11,7 @@ st.write("Ingrese los datos solicitados para registrar su asistencia en tiempo r
 
 # ⚠️ REEMPLAZA ESTA URL CON EL ENLACE QUE COPIASTE DE TU GOOGLE SHEETS
 # Asegúrate de mantener las comillas.
-URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/TU_ID_DE_DOCUMENTO_AQUÍ/edit?usp=sharing"
+URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1tHlKlDD5bVuiZTXhUGAJoJyI8P4bvmRrNjKUXIAK-4g/edit?usp=sharing"
 
 # --- Estructura del Formulario en la Web ---
 with st.form("formulario_asistencia", clear_on_submit=True):
