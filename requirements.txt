@@ -3,3 +3,4 @@ pandas
 openpyxl
 PyGithub
 st-gsheets-connection
+gspread
