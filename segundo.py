@@ -22,20 +22,20 @@ def guardar_en_github_desde_formulario(documento, correo, celular):
         g = Github(st.secrets["GITHUB_TOKEN"])
         repo = g.get_repo("semaforojo-web/Asistencia-SENA-CMM")
         
-        # Obtener contenido crudo (bytes) para evitar error de encoding[span_1](start_span)[span_1](end_span)
+        # 1. Obtener contenido crudo (bytes)[span_4](start_span)[span_4](end_span)
         contents = repo.get_contents(EXCEL_FILE, ref="main")
         archivo_bytes = io.BytesIO(contents.content)
         
+        # 2. Procesar el Excel en memoria
         wb = openpyxl.load_workbook(archivo_bytes)
         sheet = wb[SHEET_NAME]
         
         coincidencia = False
         documento_str = str(documento).strip()
         
+        # 3. Buscar coincidencia (manejo estricto de tipos de datos)[span_5](start_span)[span_5](end_span)
         for row in range(2, sheet.max_row + 1):
             val_L = sheet.cell(row=row, column=12).value
-            
-            # Limpieza para comparar: convertir a string y eliminar posibles decimales[span_2](start_span)[span_2](end_span)
             val_L_str = str(val_L).split('.')[0].strip()
             
             if val_L_str == documento_str:
@@ -49,18 +49,20 @@ def guardar_en_github_desde_formulario(documento, correo, celular):
         if not coincidencia:
             return False, None
 
-        # Guardar en memoria y subir a GitHub
+        # 4. Guardar en memoria y preparar bytes para GitHub[span_6](start_span)[span_6](end_span)
         output = io.BytesIO()
         wb.save(output)
+        contenido_bytes = output.getvalue() 
         
+        # 5. Subir a GitHub[span_7](start_span)[span_7](end_span)
         repo.update_file(
             path=EXCEL_FILE,
             message="🤖 Actualización de datos desde formulario",
-            content=output.getvalue(),
+            content=contenido_bytes,
             sha=contents.sha,
             branch="main"
         )
-        return True, output.getvalue()
+        return True, contenido_bytes
     except Exception as e:
         st.error(f"Error al sincronizar con GitHub: {e}")
         return False, None
