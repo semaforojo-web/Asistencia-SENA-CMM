@@ -6,23 +6,23 @@ def verificar_conexion():
         # 1. Autenticación
         g = Github(st.secrets["GITHUB_TOKEN"])
         user = g.get_user()
-        
-        # 2. Verificación de Repositorio
+        st.write(f"✅ Autenticado como: {user.login}")
+
+        # 2. Intentar acceder al repositorio
         repo = g.get_repo("semaforojo-web/Asistencia-SENA-CMM")
         
-        # 3. Verificación de permisos del usuario actual
-        # permission_dict devolverá valores como {'admin': True, 'push': True, 'pull': True}
-        permisos = repo.get_collaborator(user.login).permissions
-        
-        st.success(f"✅ Autenticado como: {user.login}")
-        st.write("Permisos detectados:", permisos)
-        
-        if permisos.push:
-            st.info("El token tiene permisos de ESCRITURA (Push).")
+        # 3. Verificar permisos de escritura de forma directa
+        # Si el usuario tiene acceso de escritura, esto no debería fallar.
+        # Si el token no tiene permisos suficientes, lanzará una excepción aquí.
+        st.write(f"✅ Repositorio encontrado: {repo.full_name}")
+        st.write(f"Permisos del usuario según GitHub: {repo.permissions}")
+
+        if repo.permissions.push:
+            st.success("🎉 ¡El token tiene permisos de ESCRITURA (Push)! El error no es de permisos.")
         else:
-            st.error("❌ El token NO tiene permisos de escritura. Revisa el Personal Access Token.")
+            st.error("❌ El token NO tiene permisos de escritura (Push). Debes revisar tu Personal Access Token.")
             
     except Exception as e:
-        st.error(f"❌ Error al conectar o validar permisos: {e}")
+        st.error(f"❌ Error al conectar o validar: {e}")
 
 verificar_conexion()
