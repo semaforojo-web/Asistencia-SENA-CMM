@@ -2,6 +2,10 @@ import streamlit as st
 from datetime import datetime
 import openpyxl
 import os
+import io
+from github import Github
+import pandas as pd
+
 
 st.set_page_config(page_title="Registro de Aprendices - SENA", page_icon="📝")
 
