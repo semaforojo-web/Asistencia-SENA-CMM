@@ -20,11 +20,8 @@ REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 def descargar_excel_desde_github():
     """Descarga el archivo Excel binario directamente usando la URL raw de GitHub para evitar corrupciones."""
     try:
-        # Construimos la URL Raw directa de tu archivo en GitHub
-        # Reemplaza 'semaforojo-web/asistencia-sena-cmm' si tu usuario o repositorio cambiaron
         url_raw = f"https://raw.githubusercontent.com/{REPO_NAME}/main/{DB_FILE}"
         
-        # Si tu repositorio es PRIVADO, necesitamos enviar el token de seguridad en las cabeceras
         headers = {}
         if "GITHUB_TOKEN" in st.secrets:
             headers = {"Authorization": f"token {st.secrets['GITHUB_TOKEN']}"}
@@ -32,13 +29,13 @@ def descargar_excel_desde_github():
         response = requests.get(url_raw, headers=headers)
         
         if response.status_code == 200:
-            # Retornamos los bytes puros y limpios del archivo de Excel
             return io.BytesIO(response.content)
         else:
             st.sidebar.error(f"⚠️ Error al acceder al archivo en GitHub (Código {response.status_code})")
     except Exception as e:
         st.sidebar.error(f"⚠️ Fallo en la descarga directa: {e}")
     return None
+
 # ==========================================
 # FUNCIÓN DE LÓGICA PERSISTENTE EN GITHUB (BLINDADA)
 # ==========================================
@@ -80,7 +77,7 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
                     else:
                         ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # 2. Actualizamos de forma aislada únicamente nuestras hojas de la app
+        # Actualizamos únicamente nuestras hojas de la app
         escribir_dataframe_en_hoja(wb, df_cabezote_final, "Cabezote")
         escribir_dataframe_en_hoja(wb, df_aprendices_final, "Listado de aprendices")
         escribir_dataframe_en_hoja(wb, df_instructores, "Listado de instructores")
@@ -89,16 +86,11 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         if not df_notas.empty:
             escribir_dataframe_en_hoja(wb, df_notas, "Notas")
 
-        # ========================================================
         # INYECCIÓN AUTOMÁTICA DE LA FÓRMULA EN LA HOJA CABEZOTE
-        # ========================================================
         ws_cabezote = wb["Cabezote"]
-        
-        # Opción B (Dinámica): Se aplica automáticamente a la ÚLTIMA fila real escrita
         ultima_fila = ws_cabezote.max_row
         if ultima_fila >= 1:
             ws_cabezote[f"A{ultima_fila}"] = f"=VLOOKUP(G{ultima_fila},'Listado de aprendices'!$E:$I,5,0)"
-        # ========================================================
 
         if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
             wb.remove(wb["Sheet"])
@@ -132,62 +124,90 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
     except Exception as e:
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
 
-        
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
 def obtener_instructores_y_contraseñas():
-    """Lee los instructores y sus contraseñas desde GitHub de forma segura forzando el motor openpyxl"""
-def obtener_trimestres_disponibles(grupo, instructor):
-    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub"""
+    """Lee los instructores y sus contraseñas desde GitHub de forma segura"""
+    dict_usuarios = {}
+    lista_instructores = []
+    
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
+            df_inst = pd.read_excel(archivo_memoria, sheet_name="Listado de instructores", header=None, engine='openpyxl')
+            for idx, row in df_inst.iterrows():
+                nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
+                password = str(row[1]).strip() if df_inst.shape[1] > 1 and pd.notna(row[1]) else "SENA2026"
+                
+                if nombre.upper() != "INSTRUCTOR" and nombre != "" and nombre.upper() != "NAN":
+                    dict_usuarios[nombre] = password
+                    lista_instructores.append(nombre)
+                    
+            if lista_instructores:
+                return sorted(lista_instructores), dict_usuarios
+            else:
+                return ["La hoja está vacía"], {}
+        except Exception as e:
+            return [f"Error al leer hoja: {e}"], {}
             
-            # Limpieza de grupo para evitar fallos por floats (ej: '3141501.0')
+    return ["No se pudo conectar a GitHub"], {}
+
+def cargar_datos():
+    """Carga y procesa el listado de aprendices desde GitHub"""
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
+        try:
+            df = pd.read_excel(archivo_memoria, sheet_name="Listado de aprendices", header=None, engine='openpyxl')
+            if df.empty:
+                return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
+                
+            df_procesado = pd.DataFrame()
+            df_procesado["Grupo"] = df.iloc[:, 4].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            df_procesado["Documento"] = df.iloc[:, 11].fillna("S/D").astype(str).str.strip()
+            
+            nombres_completos = df.iloc[:, 12:15].fillna("").astype(str)
+            df_procesado["Nombre Completo"] = nombres_completos.agg(' '.join, axis=1).str.replace(r'\s+', ' ', regex=True).str.strip()
+            
+            df_procesado["Estado"] = df.iloc[:, 15].fillna("").astype(str).str.upper().str.strip()
+            terminos_excluir = "CANCELADO|RETIRO VOLUNTARIO|TRASLADO"
+            df_procesado = df_procesado[~df_procesado["Estado"].str.contains(terminos_excluir, regex=True)]
+            
+            df_procesado = df_procesado[df_procesado["Grupo"].str.contains(r'^\d+$', na=False)]
+            df_procesado["Nombre Completo"] = df_procesado["Nombre Completo"].replace("", "Aprendiz sin nombre registrado")
+            
+            return df_procesado[["Grupo", "Documento", "Nombre Completo"]].reset_index(drop=True)
+        except Exception as e:
+            st.sidebar.error(f"⚠️ Error al filtrar listado de aprendices: {e}")
+            
+    return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
+
+def obtener_trimestres_disponibles(grupo, instructor):
+    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub (Columna AV - Índice 47)"""
+    archivo_memoria = descargar_excel_desde_github()
+    if archivo_memoria:
+        try:
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None, engine='openpyxl')
+            
+            # Normalizar Grupo (Columna G - Índice 6)
             df_cab[6] = df_cab[6].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             grupo_buscado = str(grupo).replace('.0', '').strip()
             
+            # Normalizar Instructor (Columna F - Índice 5)
             df_cab[5] = df_cab[5].astype(str).str.strip()
             
             filtro = (df_cab[6] == grupo_buscado) & (df_cab[5].str.upper() == str(instructor).strip().upper())
             resultado = df_cab[filtro]
             
             if not resultado.empty:
-                # Intenta primero con la columna 47 (AV). Si está vacía o no existe, intenta con la 48.
-                idx_trimestre = 47 if resultado.shape[1] > 47 else -1
-                
-                if idx_trimestre != -1:
-                    trimestres = resultado.iloc[:, idx_trimestre].dropna().astype(str).str.strip().unique().tolist()
-                    trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() not in ["NAN", "TRIMESTRE", "NONE"]])
-                    if trimestres_validos:
-                        return trimestres_validos
-        except Exception as e:
-            st.sidebar.error(f"Error al procesar trimestres: {e}")
-            
-    return ["Sin trimestres detectados"]
-
-
-def obtener_trimestres_disponibles(grupo, instructor):
-    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub"""
-    archivo_memoria = descargar_excel_desde_github()
-    if archivo_memoria:
-        try:
-            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
-            df_cab[5] = df_cab[5].astype(str).str.strip()
-            df_cab[6] = df_cab[6].astype(str).str.strip()
-            
-            filtro = (df_cab[6] == str(grupo)) & (df_cab[5].str.upper() == str(instructor).strip().upper())
-            resultado = df_cab[filtro]
-            
-            if not resultado.empty and resultado.shape[1] > 48:
-                trimestres = resultado.iloc[:, 48].dropna().astype(str).str.strip().unique().tolist()
-                trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() != "NAN" and t.upper() != "TRIMESTRE"])
+                # Comprobamos la columna AV (Índice 47) o la última disponible si hay variaciones de estructura
+                col_idx = 47 if resultado.shape[1] > 47 else resultado.shape[1] - 1
+                trimestres = resultado.iloc[:, col_idx].dropna().astype(str).str.strip().unique().tolist()
+                trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() not in ["NAN", "TRIMESTRE", "NONE"]])
                 if trimestres_validos:
                     return trimestres_validos
-        except Exception:
-            pass
+        except Exception as e:
+            st.sidebar.error(f"Error al procesar trimestres: {e}")
     return ["Sin trimestres detectados"]
 
 def obtener_materias_disponibles(grupo, instructor, trimestre):
@@ -195,19 +215,23 @@ def obtener_materias_disponibles(grupo, instructor, trimestre):
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None, engine='openpyxl')
+            df_cab[6] = df_cab[6].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             df_cab[5] = df_cab[5].astype(str).str.strip()
-            df_cab[6] = df_cab[6].astype(str).str.strip()
-            df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
             
-            filtro = (df_cab[6] == str(grupo)) & \
+            col_tri = 47 if df_cab.shape[1] > 47 else df_cab.shape[1] - 1
+            df_cab[col_tri] = df_cab[col_tri].astype(str).str.strip()
+            
+            grupo_buscado = str(grupo).replace('.0', '').strip()
+            
+            filtro = (df_cab[6] == grupo_buscado) & \
                      (df_cab[5].str.upper() == str(instructor).strip().upper()) & \
-                     (df_cab[47] == str(trimestre))
+                     (df_cab[col_tri] == str(trimestre).strip())
             resultado = df_cab[filtro]
             
             if not resultado.empty:
                 materias = resultado.iloc[:, 3].dropna().astype(str).str.strip().unique().tolist()
-                materias_validas = sorted([m for m in materias if m != "" and m.upper() != "MATERIA" and m.upper() != "NAN"])
+                materias_validas = sorted([m for m in materias if m != "" and m.upper() not in ["MATERIA", "NAN", "NONE"]])
                 if materias_validas:
                     return materias_validas
         except Exception:
@@ -219,16 +243,20 @@ def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None, engine='openpyxl')
             df_cab[3] = df_cab[3].astype(str).str.strip()
             df_cab[5] = df_cab[5].astype(str).str.strip()
-            df_cab[6] = df_cab[6].astype(str).str.strip()
-            df_cab[47] = df_cab[47].astype(str).str.strip() if df_cab.shape[1] > 47 else ""
+            df_cab[6] = df_cab[6].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             
-            filtro = (df_cab[6] == str(grupo)) & \
+            col_tri = 47 if df_cab.shape[1] > 47 else df_cab.shape[1] - 1
+            df_cab[col_tri] = df_cab[col_tri].astype(str).str.strip()
+            
+            grupo_buscado = str(grupo).replace('.0', '').strip()
+            
+            filtro = (df_cab[6] == grupo_buscado) & \
                      (df_cab[5].str.upper() == str(instructor).strip().upper()) & \
-                     (df_cab[47] == str(trimestre)) & \
-                     (df_cab[3] == str(asignacion_num))
+                     (df_cab[col_tri] == str(trimestre).strip()) & \
+                     (df_cab[3] == str(asignacion_num).strip())
                      
             resultado = df_cab[filtro]
             
@@ -240,6 +268,7 @@ def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
         except Exception as e:
             return f"Error: {e}"
     return "Archivo Excel no encontrado en GitHub"
+
 # --- MANEJO DEL ESTADO DE SESIÓN (LOGIN) ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -402,7 +431,6 @@ with tab2:
                     st.success("🔄 ¡Historial de Notas respaldado en GitHub!")
                 except Exception as e:
                     st.warning(f"Guardado local, pero no se pudo subir a GitHub: {e}")
-
 # PESTAÑA 3: REPORTES
 with tab3:
     st.header("📈 Historial de Registros")
@@ -532,18 +560,15 @@ with tab4:
                     
                     ancho_columnas = 49
                     nueva_fila = [""] * ancho_columnas
+                    
                     if str(input_asignacion_num).strip().isdigit():
                        nueva_fila[3] = int(input_asignacion_num)
                     else:
                        nueva_fila[3] = str(input_asignacion_num).strip()
             
                     nueva_fila[5] = str(input_instructor).strip()
-                    grupo_limpio = str(input_grupo).strip()
-                    if grupo_limpio.isdigit():
-                       nueva_fila[6] = int(grupo_limpio)
-                    else:
-                       nueva_fila[6] = grupo_limpio
-                    nueva_fila[6] = str(input_grupo).strip()
+                    grupo_limpio = str(input_grupo).replace('.0', '').strip()
+                    nueva_fila[6] = grupo_limpio
                     nueva_fila[7] = str(input_fase).strip()
                     nueva_fila[8] = str(input_actividades).strip()
                     nueva_fila[9] = str(input_competencia).strip()
