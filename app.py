@@ -138,59 +138,36 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
 # ==========================================
 def obtener_instructores_y_contraseñas():
     """Lee los instructores y sus contraseñas desde GitHub de forma segura forzando el motor openpyxl"""
-    dict_usuarios = {}
-    lista_instructores = []
-    
+def obtener_trimestres_disponibles(grupo, instructor):
+    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub"""
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            # Añadimos engine='openpyxl' para garantizar la lectura de bytes binarios
-            df_inst = pd.read_excel(archivo_memoria, sheet_name="Listado de instructores", header=None, engine='openpyxl')
-            for idx, row in df_inst.iterrows():
-                nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
-                password = str(row[1]).strip() if df_inst.shape[1] > 1 and pd.notna(row[1]) else "SENA2026"
+            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
+            
+            # Limpieza de grupo para evitar fallos por floats (ej: '3141501.0')
+            df_cab[6] = df_cab[6].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            grupo_buscado = str(grupo).replace('.0', '').strip()
+            
+            df_cab[5] = df_cab[5].astype(str).str.strip()
+            
+            filtro = (df_cab[6] == grupo_buscado) & (df_cab[5].str.upper() == str(instructor).strip().upper())
+            resultado = df_cab[filtro]
+            
+            if not resultado.empty:
+                # Intenta primero con la columna 47 (AV). Si está vacía o no existe, intenta con la 48.
+                idx_trimestre = 47 if resultado.shape[1] > 47 else -1
                 
-                if nombre.upper() != "INSTRUCTOR" and nombre != "" and nombre.upper() != "NAN":
-                    dict_usuarios[nombre] = password
-                    lista_instructores.append(nombre)
-                    
-            if lista_instructores:
-                return sorted(lista_instructores), dict_usuarios
-            else:
-                return ["La hoja está vacía"], {}
+                if idx_trimestre != -1:
+                    trimestres = resultado.iloc[:, idx_trimestre].dropna().astype(str).str.strip().unique().tolist()
+                    trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() not in ["NAN", "TRIMESTRE", "NONE"]])
+                    if trimestres_validos:
+                        return trimestres_validos
         except Exception as e:
-            return [f"Error al leer hoja: {e}"], {}
+            st.sidebar.error(f"Error al procesar trimestres: {e}")
             
-    return ["No se pudo conectar a GitHub"], {}
-def cargar_datos():
-    """Carga y procesa el listado de aprendices desde GitHub asegurando el motor openpyxl"""
-    archivo_memoria = descargar_excel_desde_github()
-    if archivo_memoria:
-        try:
-            # Forzamos el uso de engine='openpyxl' para evitar errores de lectura binaria
-            df = pd.read_excel(archivo_memoria, sheet_name="Listado de aprendices", header=None, engine='openpyxl')
-            if df.empty:
-                return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
-                
-            df_procesado = pd.DataFrame()
-            df_procesado["Grupo"] = df.iloc[:, 4].astype(str).str.strip()
-            df_procesado["Documento"] = df.iloc[:, 11].fillna("S/D").astype(str).str.strip()
-            
-            nombres_completos = df.iloc[:, 12:15].fillna("").astype(str)
-            df_procesado["Nombre Completo"] = nombres_completos.agg(' '.join, axis=1).str.replace(r'\s+', ' ', regex=True).str.strip()
-            
-            df_procesado["Estado"] = df.iloc[:, 15].fillna("").astype(str).str.upper().str.strip()
-            terminos_excluir = "CANCELADO|RETIRO VOLUNTARIO|TRASLADO"
-            df_procesado = df_procesado[~df_procesado["Estado"].str.contains(terminos_excluir, regex=True)]
-            
-            df_procesado = df_procesado[df_procesado["Grupo"].str.contains(r'^\d+$', na=False)]
-            df_procesado["Nombre Completo"] = df_procesado["Nombre Completo"].replace("", "Aprendiz sin nombre registrado")
-            
-            return df_procesado[["Grupo", "Documento", "Nombre Completo"]].reset_index(drop=True)
-        except Exception as e:
-            st.sidebar.error(f"⚠️ Error al filtrar listado de aprendices: {e}")
-            
-    return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
+    return ["Sin trimestres detectados"]
+
 
 def obtener_trimestres_disponibles(grupo, instructor):
     """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub"""
