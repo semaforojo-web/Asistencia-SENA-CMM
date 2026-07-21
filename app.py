@@ -204,8 +204,8 @@ def obtener_trimestres_disponibles(grupo, instructor):
             filtro = (df_cab[6] == str(grupo)) & (df_cab[5].str.upper() == str(instructor).strip().upper())
             resultado = df_cab[filtro]
             
-            if not resultado.empty and resultado.shape[1] > 47:
-                trimestres = resultado.iloc[:, 47].dropna().astype(str).str.strip().unique().tolist()
+            if not resultado.empty and resultado.shape[1] > 48:
+                trimestres = resultado.iloc[:, 48].dropna().astype(str).str.strip().unique().tolist()
                 trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() != "NAN" and t.upper() != "TRIMESTRE"])
                 if trimestres_validos:
                     return trimestres_validos
