@@ -20,11 +20,8 @@ REPO_NAME = "semaforojo-web/Asistencia-SENA-CMM"
 def descargar_excel_desde_github():
     """Descarga el archivo Excel binario directamente usando la URL raw de GitHub para evitar corrupciones."""
     try:
-        # Construimos la URL Raw directa de tu archivo en GitHub
-        # Reemplaza 'semaforojo-web/asistencia-sena-cmm' si tu usuario o repositorio cambiaron
         url_raw = f"https://raw.githubusercontent.com/{REPO_NAME}/main/{DB_FILE}"
         
-        # Si tu repositorio es PRIVADO, necesitamos enviar el token de seguridad en las cabeceras
         headers = {}
         if "GITHUB_TOKEN" in st.secrets:
             headers = {"Authorization": f"token {st.secrets['GITHUB_TOKEN']}"}
@@ -32,13 +29,13 @@ def descargar_excel_desde_github():
         response = requests.get(url_raw, headers=headers)
         
         if response.status_code == 200:
-            # Retornamos los bytes puros y limpios del archivo de Excel
             return io.BytesIO(response.content)
         else:
             st.sidebar.error(f"⚠️ Error al acceder al archivo en GitHub (Código {response.status_code})")
     except Exception as e:
         st.sidebar.error(f"⚠️ Fallo en la descarga directa: {e}")
     return None
+
 # ==========================================
 # FUNCIÓN DE LÓGICA PERSISTENTE EN GITHUB (BLINDADA)
 # ==========================================
@@ -80,7 +77,7 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
                     else:
                         ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # 2. Actualizamos de forma aislada únicamente nuestras hojas de la app
+        # Actualizamos de forma aislada únicamente nuestras hojas de la app
         escribir_dataframe_en_hoja(wb, df_cabezote_final, "Cabezote")
         escribir_dataframe_en_hoja(wb, df_aprendices_final, "Listado de aprendices")
         escribir_dataframe_en_hoja(wb, df_instructores, "Listado de instructores")
@@ -89,16 +86,11 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         if not df_notas.empty:
             escribir_dataframe_en_hoja(wb, df_notas, "Notas")
 
-        # ========================================================
         # INYECCIÓN AUTOMÁTICA DE LA FÓRMULA EN LA HOJA CABEZOTE
-        # ========================================================
         ws_cabezote = wb["Cabezote"]
-        
-        # Opción B (Dinámica): Se aplica automáticamente a la ÚLTIMA fila real escrita
         ultima_fila = ws_cabezote.max_row
         if ultima_fila >= 1:
             ws_cabezote[f"A{ultima_fila}"] = f"=VLOOKUP(G{ultima_fila},'Listado de aprendices'!$E:$I,5,0)"
-        # ========================================================
 
         if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
             wb.remove(wb["Sheet"])
@@ -132,7 +124,6 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
     except Exception as e:
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
 
-        
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
@@ -144,7 +135,6 @@ def obtener_instructores_y_contraseñas():
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            # Añadimos engine='openpyxl' para garantizar la lectura de bytes binarios
             df_inst = pd.read_excel(archivo_memoria, sheet_name="Listado de instructores", header=None, engine='openpyxl')
             for idx, row in df_inst.iterrows():
                 nombre = str(row[0]).strip() if pd.notna(row[0]) else ""
@@ -162,12 +152,12 @@ def obtener_instructores_y_contraseñas():
             return [f"Error al leer hoja: {e}"], {}
             
     return ["No se pudo conectar a GitHub"], {}
+
 def cargar_datos():
     """Carga y procesa el listado de aprendices desde GitHub asegurando el motor openpyxl"""
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
-            # Forzamos el uso de engine='openpyxl' para evitar errores de lectura binaria
             df = pd.read_excel(archivo_memoria, sheet_name="Listado de aprendices", header=None, engine='openpyxl')
             if df.empty:
                 return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
@@ -263,6 +253,7 @@ def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
         except Exception as e:
             return f"Error: {e}"
     return "Archivo Excel no encontrado en GitHub"
+
 # --- MANEJO DEL ESTADO DE SESIÓN (LOGIN) ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -337,7 +328,7 @@ st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_grupo)}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Alimentar y Cargar Bases"])
 
-# PESTAÑA 1: LLAMADO A LISTA
+# PESTAÑA 1: LLAMADO A LISTA (MODIFICADA CON OPCIONES A, IS, AR)
 with tab1:
     st.header(f"📋 Control de Asistencia")
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
@@ -345,23 +336,39 @@ with tab1:
     if alumnos_grupo.empty:
         st.warning(f"No hay aprendices activos asignados al grupo seleccionado.")
     else:
+        st.caption("📌 **Convenciones:** **A** = Asiste | **IS** = No asiste | **AR** = Llegada tarde")
+        
         with st.form(key=f"formulario_asistencia_{grupo_seleccionado}"):
             asistencia_dict = {}
             for idx, row in alumnos_grupo.iterrows():
-                c1, c2, c3 = st.columns([2, 5, 2])
+                c1, c2, c3 = st.columns([2, 5, 3])
                 c1.text(row["Documento"])
                 c2.text(row["Nombre Completo"])
-                asistencia_dict[idx] = c3.checkbox("Presente", value=True, key=f"check_{grupo_seleccionado}_{idx}")
+                
+                asistencia_dict[idx] = c3.selectbox(
+                    "Estado",
+                    options=["A", "IS", "AR"],
+                    index=0,
+                    key=f"select_asist_{grupo_seleccionado}_{idx}",
+                    label_visibility="collapsed"
+                )
+                
             boton_guardar = st.form_submit_button("💾 Guardar Lista Completa", type="primary")
             
         if boton_guardar:
             registros = []
             for idx, row in alumnos_grupo.iterrows():
-                estado = "Presente" if asistencia_dict[idx] else "Falta"
+                estado = asistencia_dict[idx]
                 registros.append({
-                    "Fecha": fecha_asistencia, "Grupo": grupo_seleccionado, "Instructor": instructor_seleccionado,
-                    "Trimestre": trimestre_seleccionado, "Asignacion_Num": asignacion_num_seleccionada,
-                    "Resultados": materia_detectada, "Documento": row["Documento"], "Nombre": row["Nombre Completo"], "Asistencia": estado
+                    "Fecha": fecha_asistencia, 
+                    "Grupo": grupo_seleccionado, 
+                    "Instructor": instructor_seleccionado,
+                    "Trimestre": trimestre_seleccionado, 
+                    "Asignacion_Num": asignacion_num_seleccionada,
+                    "Resultados": materia_detectada, 
+                    "Documento": row["Documento"], 
+                    "Nombre": row["Nombre Completo"], 
+                    "Asistencia": estado
                 })
             
             df_nuevos_pasos = pd.DataFrame(registros)
@@ -566,7 +573,6 @@ with tab4:
                        nueva_fila[6] = int(grupo_limpio)
                     else:
                        nueva_fila[6] = grupo_limpio
-                    nueva_fila[6] = str(input_grupo).strip()
                     nueva_fila[7] = str(input_fase).strip()
                     nueva_fila[8] = str(input_actividades).strip()
                     nueva_fila[9] = str(input_competencia).strip()
