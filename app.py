@@ -125,6 +125,44 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
 
 # ==========================================
+# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU)
+# ==========================================
+def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
+    """
+    Lee asistencia_guardada.csv, agrupa por Grupo, Instructor, Trimestre, Asignacion_Num, Documento y Nombre.
+    Cuenta las inasistencias ("IS") y genera la tabla de 'fallas acumuladas' (FACU) únicamente para conteos > 0.
+    """
+    if not os.path.exists(archivo_csv):
+        return pd.DataFrame(columns=["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"])
+    
+    try:
+        df_asistencia = pd.read_csv(archivo_csv)
+        if df_asistencia.empty:
+            return pd.DataFrame(columns=["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"])
+        
+        cols_agrupacion = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre"]
+        
+        # Verificar que existan todas las columnas necesarias
+        for col in cols_agrupacion + ["Asistencia"]:
+            if col not in df_asistencia.columns:
+                return pd.DataFrame(columns=cols_agrupacion + ["FACU"])
+        
+        # Agrupar y contar inasistencias ("IS")
+        df_fallas = (
+            df_asistencia
+            .groupby(cols_agrupacion)["Asistencia"]
+            .apply(lambda x: (x == "IS").sum())
+            .reset_index(name="FACU")
+        )
+        
+        # Filtrar solo quienes tengan más de cero fallas
+        fallas_acumuladas = df_fallas[df_fallas["FACU"] > 0].reset_index(drop=True)
+        return fallas_acumuladas
+    except Exception as e:
+        st.error(f"Error al calcular fallas acumuladas: {e}")
+        return pd.DataFrame(columns=["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"])
+
+# ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
 def obtener_instructores_y_contraseñas():
@@ -435,8 +473,8 @@ with tab2:
 
 # PESTAÑA 3: REPORTES
 with tab3:
-    st.header("📈 Historial de Registros")
-    sub_tab1, sub_tab2 = st.tabs(["Histórico de Asistencias", "Histórico de Notas"])
+    st.header("📈 Historial de Registros y Reportes")
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["Histórico de Asistencias", "Histórico de Notas", "⚠️ Fallas Acumuladas (FACU)"])
     
     with sub_tab1:
         if os.path.exists("asistencia_guardada.csv"):
@@ -469,6 +507,24 @@ with tab3:
             )
         else:
             st.info("No hay registros de notas locales aún.")
+
+    with sub_tab3:
+        st.subheader("🚨 Reporte de Aprendices con Inasistencias (FACU > 0)")
+        df_facu = calcular_fallas_acumuladas("asistencia_guardada.csv")
+        
+        if not df_facu.empty:
+            st.dataframe(df_facu, use_container_width=True)
+            
+            csv_facu = df_facu.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                label="📥 Descargar Reporte de Fallas Acumuladas (CSV)",
+                data=csv_facu,
+                file_name="fallas_acumuladas.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.success("🎉 No se registran aprendices con inasistencias acumuladas (IS > 0).")
 
 # PESTAÑA 4: GESTIÓN DE BASES DE DATOS
 with tab4:
