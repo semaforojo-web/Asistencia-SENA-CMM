@@ -125,6 +125,49 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
         st.error(f"⚠️ Error crítico en la conexión con GitHub: {e}")
 
 # ==========================================
+# FUNCIÓN: DETERMINAR TRIMESTRE ACTUAL AUTOMÁTICO
+# ==========================================
+def obtener_trimestre_actual():
+    """
+    Calcula el trimestre vigente dinámicamente según la fecha actual.
+    Formatos soportados: 1-YYYY, 2-YYYY, 3-YYYY, 4-YYYY
+    """
+    hoy = datetime.now()
+    year = hoy.year
+    
+    t1_inicio = datetime(year, 1, 29)
+    t1_fin    = datetime(year, 4, 14, 23, 59, 59)
+    
+    t2_inicio = datetime(year, 4, 20)
+    t2_fin    = datetime(year, 7, 4, 23, 59, 59)
+    
+    t3_inicio = datetime(year, 7, 9)
+    t3_fin    = datetime(year, 9, 28, 23, 59, 59)
+    
+    t4_inicio = datetime(year, 10, 2)
+    t4_fin    = datetime(year, 12, 16, 23, 59, 59)
+    
+    if t1_inicio <= hoy <= t1_fin:
+        return f"1-{year}"
+    elif t2_inicio <= hoy <= t2_fin:
+        return f"2-{year}"
+    elif t3_inicio <= hoy <= t3_fin:
+        return f"3-{year}"
+    elif t4_inicio <= hoy <= t4_fin:
+        return f"4-{year}"
+    else:
+        if hoy < t1_inicio:
+            return f"1-{year}"
+        elif t1_fin < hoy < t2_inicio:
+            return f"2-{year}"
+        elif t2_fin < hoy < t3_inicio:
+            return f"3-{year}"
+        elif t3_fin < hoy < t4_inicio:
+            return f"4-{year}"
+        else:
+            return f"1-{year + 1}"
+
+# ==========================================
 # FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU)
 # ==========================================
 def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
@@ -142,12 +185,10 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
         
         cols_agrupacion = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre"]
         
-        # Verificar que existan todas las columnas necesarias
         for col in cols_agrupacion + ["Asistencia"]:
             if col not in df_asistencia.columns:
                 return pd.DataFrame(columns=cols_agrupacion + ["FACU"])
         
-        # Agrupar y contar inasistencias ("IS")
         df_fallas = (
             df_asistencia
             .groupby(cols_agrupacion)["Asistencia"]
@@ -155,7 +196,6 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
             .reset_index(name="FACU")
         )
         
-        # Filtrar solo quienes tengan más de cero fallas
         fallas_acumuladas = df_fallas[df_fallas["FACU"] > 0].reset_index(drop=True)
         return fallas_acumuladas
     except Exception as e:
@@ -166,7 +206,6 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
 def obtener_instructores_y_contraseñas():
-    """Lee los instructores y sus contraseñas desde GitHub de forma segura forzando el motor openpyxl"""
     dict_usuarios = {}
     lista_instructores = []
     
@@ -192,7 +231,6 @@ def obtener_instructores_y_contraseñas():
     return ["No se pudo conectar a GitHub"], {}
 
 def cargar_datos():
-    """Carga y procesa el listado de aprendices desde GitHub asegurando el motor openpyxl"""
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
@@ -220,29 +258,7 @@ def cargar_datos():
             
     return pd.DataFrame(columns=["Grupo", "Documento", "Nombre Completo"])
 
-def obtener_trimestres_disponibles(grupo, instructor):
-    """Busca los trimestres vinculados a un grupo e instructor en el Cabezote desde GitHub"""
-    archivo_memoria = descargar_excel_desde_github()
-    if archivo_memoria:
-        try:
-            df_cab = pd.read_excel(archivo_memoria, sheet_name="Cabezote", header=None)
-            df_cab[5] = df_cab[5].astype(str).str.strip()
-            df_cab[6] = df_cab[6].astype(str).str.strip()
-            
-            filtro = (df_cab[6] == str(grupo)) & (df_cab[5].str.upper() == str(instructor).strip().upper())
-            resultado = df_cab[filtro]
-            
-            if not resultado.empty and resultado.shape[1] > 47:
-                trimestres = resultado.iloc[:, 47].dropna().astype(str).str.strip().unique().tolist()
-                trimestres_validos = sorted([t for t in trimestres if t != "" and t.upper() != "NAN" and t.upper() != "TRIMESTRE"])
-                if trimestres_validos:
-                    return trimestres_validos
-        except Exception:
-            pass
-    return ["Sin trimestres detectados"]
-
 def obtener_materias_disponibles(grupo, instructor, trimestre):
-    """Obtiene los números de asignación cargados desde GitHub"""
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
@@ -266,7 +282,6 @@ def obtener_materias_disponibles(grupo, instructor, trimestre):
     return ["1", "2", "3"]
 
 def filtrar_materia_final(grupo, instructor, trimestre, asignacion_num):
-    """Retorna el nombre largo de la asignatura basándose en el archivo de GitHub"""
     archivo_memoria = descargar_excel_desde_github()
     if archivo_memoria:
         try:
@@ -350,8 +365,15 @@ st.sidebar.header("⚙️ Filtros de Planificación")
 lista_grupos = sorted(df_aprendices["Grupo"].dropna().unique()) if not df_aprendices.empty else []
 grupo_seleccionado = st.sidebar.selectbox("1. Seleccione el Grupo:", lista_grupos if lista_grupos else ["Sin datos"])
 
-lista_trimestres_dinamicos = obtener_trimestres_disponibles(grupo_seleccionado, instructor_seleccionado)
-trimestre_seleccionado = st.sidebar.selectbox("3. Seleccione el Trimestre:", lista_trimestres_dinamicos)
+# --- TRIMESTRE AUTOMÁTICO VIGENTE ---
+trimestre_vigente = obtener_trimestre_actual()
+trimestre_seleccionado = st.sidebar.selectbox(
+    "3. Seleccione el Trimestre:",
+    options=[trimestre_vigente],
+    index=0,
+    disabled=True,
+    help="Restringido automáticamente al trimestre vigente según la fecha del sistema."
+)
 
 lista_asignaciones_dinamicas = obtener_materias_disponibles(grupo_seleccionado, instructor_seleccionado, trimestre_seleccionado)
 asignacion_num_seleccionada = st.sidebar.selectbox("4. Seleccione Asignación:", lista_asignaciones_dinamicas)
@@ -366,7 +388,7 @@ st.sidebar.markdown(f"**Total Aprendices Activos:** {len(alumnos_grupo)}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competencia", "📈 Historial y Reportes", "📂 Alimentar y Cargar Bases"])
 
-# PESTAÑA 1: LLAMADO A LISTA (MODIFICADA CON OPCIONES A, IS, AR)
+# PESTAÑA 1: LLAMADO A LISTA
 with tab1:
     st.header(f"📋 Control de Asistencia")
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
@@ -604,7 +626,7 @@ with tab4:
                 
                 st.markdown("---")
                 c_f1, c_f2 = st.columns(2)
-                input_trimestre = c_f1.text_input("Trimestre en curso (Columna AV):", placeholder="Ej: Trimestre 1")
+                input_trimestre = c_f1.text_input("Trimestre en curso (Columna AV):", value=trimestre_vigente, disabled=True)
                 input_observaciones = c_f2.text_input("Observaciones (Columna AW):")
             
             boton_agregar_cab = st.form_submit_button("💾 Insertar y Sincronizar en GitHub", type="primary")
@@ -717,3 +739,4 @@ with tab4:
                 )
         except Exception:
             pass
+
