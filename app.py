@@ -240,6 +240,34 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
     except Exception as e:
         st.error(f"Error al calcular fallas acumuladas: {e}")
         return pd.DataFrame(columns=cols_base)
+
+# --- DIÁLOGO / ANUNCIO EMERGENTE DE ALERTA AL INSTRUCTOR ---
+@st.dialog("⚠️ ALERTA DE SEGUIMIENTO A APRENDICES")
+def mostrar_alerta_fallas(df_alertas):
+    st.error("¡Atención! Se han detectado aprendices con fallas consecutivas acumuladas:")
+    st.dataframe(df_alertas[["Documento", "Nombre", "FACU"]], use_container_width=True)
+    st.info("Por favor, realice el reporte o seguimiento correspondiente ante la coordinación.")
+    if st.button("Entendido y Continuar", type="primary"):
+        st.rerun()
+
+# --- LÓGICA DE ACTIVACIÓN EN LA PESTAÑA 1 ---
+with tab1:
+    st.header("📋 Control de Asistencia")
+    
+    # Evaluar si existen fallas de 2 C o 3 C para el grupo activo
+    df_facu_actual = calcular_fallas_acumuladas("asistencia_guardada.csv")
+    if not df_facu_actual.empty:
+        alertas_grupo = df_facu_actual[
+            (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
+            (df_facu_actual["FACU"].isin(["2 C", "3 C"]))
+        ]
+        
+        # Mostrar botón de alerta y abrir el diálogo si hay coincidencias
+        if not alertas_grupo.empty:
+            st.warning(f"🚨 Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas (2 C / 3 C) en este grupo.")
+            if st.button("🔔 Ver Alerta Emergente"):
+                mostrar_alerta_fallas(alertas_grupo)
+
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
