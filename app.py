@@ -187,22 +187,18 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
         
         cols_agrupacion = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre"]
         
-        # Validar que existan todas las columnas necesarias
         for col in cols_agrupacion + ["Asistencia", "Fecha"]:
             if col not in df_asistencia.columns:
                 return pd.DataFrame(columns=cols_base)
         
-        # Ordenar por fecha para evaluar la secuencia temporal exacta
         df_asistencia["Fecha"] = pd.to_datetime(df_asistencia["Fecha"], errors="coerce")
         df_asistencia = df_asistencia.sort_values(by=cols_agrupacion + ["Fecha"])
         
-        # Función interna para procesar el conteo y la consecutividad por aprendiz
         def procesar_fallas_grupo(grupo_df):
             total_fallas = (grupo_df["Asistencia"] == "IS").sum()
             if total_fallas == 0:
                 return pd.Series({"FACU": None})
             
-            # Evaluar racha de fallas consecutivas al final o dentro de la secuencia
             asistencias = grupo_df["Asistencia"].tolist()
             max_consecutivas = 0
             contador_actual = 0
@@ -215,7 +211,6 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
                 else:
                     contador_actual = 0
             
-            # Clasificación requerida: 2 C o 3 C si la racha máxima coincide
             if max_consecutivas == 2:
                 facu_str = f"{total_fallas} C" if total_fallas == 2 else f"{total_fallas}"
             elif max_consecutivas == 3:
@@ -225,7 +220,6 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
                 
             return pd.Series({"FACU": facu_str})
 
-        # Aplicar el cálculo por aprendiz
         df_fallas = (
             df_asistencia
             .groupby(cols_agrupacion, group_keys=False)
@@ -233,7 +227,6 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
             .reset_index()
         )
         
-        # Filtrar solo los registros que tienen fallas
         fallas_acumuladas = df_fallas[df_fallas["FACU"].notna()].reset_index(drop=True)
         return fallas_acumuladas
 
@@ -241,32 +234,14 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
         st.error(f"Error al calcular fallas acumuladas: {e}")
         return pd.DataFrame(columns=cols_base)
 
-# --- DIÁLOGO / ANUNCIO EMERGENTE DE ALERTA AL INSTRUCTOR ---
+# ==========================================
+# FUNCIÓN: DIÁLOGO EMERGENTE DE ALERTA
+# ==========================================
 @st.dialog("⚠️ ALERTA DE SEGUIMIENTO A APRENDICES")
 def mostrar_alerta_fallas(df_alertas):
-    st.error("¡Atención! Se han detectado aprendices con fallas consecutivas acumuladas:")
+    st.error("¡Atención! Se han detectado aprendices con fallas consecutivas acumuladas (2 C / 3 C):")
     st.dataframe(df_alertas[["Documento", "Nombre", "FACU"]], use_container_width=True)
     st.info("Por favor, realice el reporte o seguimiento correspondiente ante la coordinación.")
-    if st.button("Entendido y Continuar", type="primary"):
-        st.rerun()
-
-# --- LÓGICA DE ACTIVACIÓN EN LA PESTAÑA 1 ---
-with tab1:
-    st.header("📋 Control de Asistencia")
-    
-    # Evaluar si existen fallas de 2 C o 3 C para el grupo activo
-    df_facu_actual = calcular_fallas_acumuladas("asistencia_guardada.csv")
-    if not df_facu_actual.empty:
-        alertas_grupo = df_facu_actual[
-            (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
-            (df_facu_actual["FACU"].isin(["2 C", "3 C"]))
-        ]
-        
-        # Mostrar botón de alerta y abrir el diálogo si hay coincidencias
-        if not alertas_grupo.empty:
-            st.warning(f"🚨 Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas (2 C / 3 C) en este grupo.")
-            if st.button("🔔 Ver Alerta Emergente"):
-                mostrar_alerta_fallas(alertas_grupo)
 
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
@@ -456,7 +431,25 @@ tab1, tab2, tab3, tab4 = st.tabs(["📋 Llamado a Lista", "📝 Evaluar Competen
 
 # PESTAÑA 1: LLAMADO A LISTA
 with tab1:
-    st.header(f"📋 Control de Asistencia")
+    st.header("📋 Control de Asistencia")
+    
+    # -------------------------------------------------------------
+    # EVALUACIÓN DE ALERTAS CONSECUTIVAS (2 C / 3 C)
+    # -------------------------------------------------------------
+    df_facu_actual = calcular_fallas_acumuladas("asistencia_guardada.csv")
+    
+    if not df_facu_actual.empty and "Grupo" in df_facu_actual.columns:
+        alertas_grupo = df_facu_actual[
+            (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
+            (df_facu_actual["FACU"].isin(["2 C", "3 C"]))
+        ]
+        
+        if not alertas_grupo.empty:
+            st.warning(f"🚨 **Alerta Instructor:** Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas acumuladas en este grupo.")
+            if st.button("🔔 Ver Alerta Emergente", key="btn_alerta_modal"):
+                mostrar_alerta_fallas(alertas_grupo)
+    # -------------------------------------------------------------
+
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
     
     if alumnos_grupo.empty:
@@ -805,4 +798,3 @@ with tab4:
                 )
         except Exception:
             pass
-
