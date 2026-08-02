@@ -168,40 +168,78 @@ def obtener_trimestre_actual():
             return f"1-{year + 1}"
 
 # ==========================================
-# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU)
+# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU) CON CONSECUTIVIDAD
 # ==========================================
 def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
     """
-    Lee asistencia_guardada.csv, agrupa por Grupo, Instructor, Trimestre, Asignacion_Num, Documento y Nombre.
-    Cuenta las inasistencias ("IS") y genera la tabla de 'fallas acumuladas' (FACU) únicamente para conteos > 0.
+    Lee asistencia_guardada.csv, calcula el total de fallas ("IS") por aprendiz
+    y clasifica si corresponden a 2 C (2 consecutivas) o 3 C (3 consecutivas).
     """
+    cols_base = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"]
+    
     if not os.path.exists(archivo_csv):
-        return pd.DataFrame(columns=["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"])
+        return pd.DataFrame(columns=cols_base)
     
     try:
         df_asistencia = pd.read_csv(archivo_csv)
         if df_asistencia.empty:
-            return pd.DataFrame(columns=["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"])
+            return pd.DataFrame(columns=cols_base)
         
         cols_agrupacion = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre"]
         
-        for col in cols_agrupacion + ["Asistencia"]:
+        # Validar que existan todas las columnas necesarias
+        for col in cols_agrupacion + ["Asistencia", "Fecha"]:
             if col not in df_asistencia.columns:
-                return pd.DataFrame(columns=cols_agrupacion + ["FACU"])
+                return pd.DataFrame(columns=cols_base)
         
+        # Ordenar por fecha para evaluar la secuencia temporal exacta
+        df_asistencia["Fecha"] = pd.to_datetime(df_asistencia["Fecha"], errors="coerce")
+        df_asistencia = df_asistencia.sort_values(by=cols_agrupacion + ["Fecha"])
+        
+        # Función interna para procesar el conteo y la consecutividad por aprendiz
+        def procesar_fallas_grupo(grupo_df):
+            total_fallas = (grupo_df["Asistencia"] == "IS").sum()
+            if total_fallas == 0:
+                return pd.Series({"FACU": None})
+            
+            # Evaluar racha de fallas consecutivas al final o dentro de la secuencia
+            asistencias = grupo_df["Asistencia"].tolist()
+            max_consecutivas = 0
+            contador_actual = 0
+            
+            for estado in asistencias:
+                if estado == "IS":
+                    contador_actual += 1
+                    if contador_actual > max_consecutivas:
+                        max_consecutivas = contador_actual
+                else:
+                    contador_actual = 0
+            
+            # Clasificación requerida: 2 C o 3 C si la racha máxima coincide
+            if max_consecutivas == 2:
+                facu_str = f"{total_fallas} C" if total_fallas == 2 else f"{total_fallas}"
+            elif max_consecutivas == 3:
+                facu_str = f"{total_fallas} C" if total_fallas == 3 else f"{total_fallas}"
+            else:
+                facu_str = f"{total_fallas}"
+                
+            return pd.Series({"FACU": facu_str})
+
+        # Aplicar el cálculo por aprendiz
         df_fallas = (
             df_asistencia
-            .groupby(cols_agrupacion)["Asistencia"]
-            .apply(lambda x: (x == "IS").sum())
-            .reset_index(name="FACU")
+            .groupby(cols_agrupacion, group_keys=False)
+            .apply(procesar_fallas_grupo)
+            .reset_index()
         )
         
-        fallas_acumuladas = df_fallas[df_fallas["FACU"] > 0].reset_index(drop=True)
+        # Filtrar solo los registros que tienen fallas
+        fallas_acumuladas = df_fallas[df_fallas["FACU"].notna()].reset_index(drop=True)
         return fallas_acumuladas
+
     except Exception as e:
         st.error(f"Error al calcular fallas acumuladas: {e}")
-        return pd.DataFrame(columns=["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"])
-
+        return pd.DataFrame(columns=cols_base)
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
