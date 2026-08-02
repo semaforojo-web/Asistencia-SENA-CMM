@@ -6,6 +6,7 @@ import io
 from datetime import datetime
 from github import Github
 from openpyxl import load_workbook
+import holidays
 
 # Configuración de la página para entorno móvil y de escritorio
 st.set_page_config(page_title="Control de Asistencia y Evaluación - SENA", layout="wide")
@@ -77,7 +78,6 @@ def guardar_y_sincronizar_a_github(df_cabezote_final, df_aprendices_final, df_in
                     else:
                         ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # Actualizamos de forma aislada únicamente nuestras hojas de la app
         escribir_dataframe_en_hoja(wb, df_cabezote_final, "Cabezote")
         escribir_dataframe_en_hoja(wb, df_aprendices_final, "Listado de aprendices")
         escribir_dataframe_en_hoja(wb, df_instructores, "Listado de instructores")
@@ -168,12 +168,13 @@ def obtener_trimestre_actual():
             return f"1-{year + 1}"
 
 # ==========================================
-# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU) CON CONSECUTIVIDAD
+# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU) DÍAS HÁBILES COLOMBIA
 # ==========================================
 def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
     """
     Lee asistencia_guardada.csv, calcula el total de fallas ("IS") por aprendiz
-    y clasifica si corresponden a 2 C (2 consecutivas) o 3 C (3 consecutivas).
+    y clasifica 2 C o 3 C ÚNICAMENTE si han transcurrido al menos 5 días hábiles
+    laborales en Colombia (excluyendo sábados, domingos y festivos nacionales).
     """
     cols_base = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"]
     
@@ -194,10 +195,30 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
         df_asistencia["Fecha"] = pd.to_datetime(df_asistencia["Fecha"], errors="coerce")
         df_asistencia = df_asistencia.sort_values(by=cols_agrupacion + ["Fecha"])
         
+        fecha_actual = pd.Timestamp.now().normalize()
+        
+        # Obtener festivos oficiales de Colombia
+        anios = [fecha_actual.year - 1, fecha_actual.year, fecha_actual.year + 1]
+        festivos_colombia = holidays.Colombia(years=anios)
+        
+        def contar_dias_habiles_colombia(fecha_inicio, fecha_fin):
+            """Cuenta días de lunes a viernes descartando festivos de Colombia."""
+            dias = pd.date_range(start=fecha_inicio, end=fecha_fin, freq="D")
+            dias_habiles = [
+                d for d in dias 
+                if d.weekday() < 5 and d.strftime("%Y-%m-%d") not in festivos_colombia
+            ]
+            return max(0, len(dias_habiles) - 1)
+        
         def procesar_fallas_grupo(grupo_df):
             total_fallas = (grupo_df["Asistencia"] == "IS").sum()
             if total_fallas == 0:
                 return pd.Series({"FACU": None})
+            
+            fallas_df = grupo_df[grupo_df["Asistencia"] == "IS"]
+            ultima_fecha_falla = fallas_df["Fecha"].max().normalize()
+            
+            dias_habiles_transcurridos = contar_dias_habiles_colombia(ultima_fecha_falla, fecha_actual)
             
             asistencias = grupo_df["Asistencia"].tolist()
             max_consecutivas = 0
@@ -211,10 +232,12 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
                 else:
                     contador_actual = 0
             
-            if max_consecutivas == 2:
-                facu_str = f"{total_fallas} C" if total_fallas == 2 else f"{total_fallas}"
-            elif max_consecutivas == 3:
-                facu_str = f"{total_fallas} C" if total_fallas == 3 else f"{total_fallas}"
+            cumple_dias_habiles = dias_habiles_transcurridos >= 5
+            
+            if max_consecutivas == 2 and total_fallas == 2 and cumple_dias_habiles:
+                facu_str = f"{total_fallas} C"
+            elif max_consecutivas == 3 and total_fallas == 3 and cumple_dias_habiles:
+                facu_str = f"{total_fallas} C"
             else:
                 facu_str = f"{total_fallas}"
                 
@@ -406,7 +429,6 @@ st.sidebar.header("⚙️ Filtros de Planificación")
 lista_grupos = sorted(df_aprendices["Grupo"].dropna().unique()) if not df_aprendices.empty else []
 grupo_seleccionado = st.sidebar.selectbox("1. Seleccione el Grupo:", lista_grupos if lista_grupos else ["Sin datos"])
 
-# --- TRIMESTRE AUTOMÁTICO VIGENTE ---
 trimestre_vigente = obtener_trimestre_actual()
 trimestre_seleccionado = st.sidebar.selectbox(
     "3. Seleccione el Trimestre:",
@@ -445,7 +467,7 @@ with tab1:
         ]
         
         if not alertas_grupo.empty:
-            st.warning(f"🚨 **Alerta Instructor:** Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas acumuladas en este grupo.")
+            st.warning(f"🚨 **Alerta Instructor:** Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas acumuladas que superan 5 días hábiles en este grupo.")
             if st.button("🔔 Ver Alerta Emergente", key="btn_alerta_modal"):
                 mostrar_alerta_fallas(alertas_grupo)
     # -------------------------------------------------------------
