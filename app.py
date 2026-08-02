@@ -168,13 +168,15 @@ def obtener_trimestre_actual():
             return f"1-{year + 1}"
 
 # ==========================================
-# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU) DÍAS HÁBILES COLOMBIA
+# FUNCIÓN: CALCULAR FALLAS ACUMULADAS (FACU) CON DETALLE DE TOTAL
 # ==========================================
 def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
     """
     Lee asistencia_guardada.csv, calcula el total de fallas ("IS") por aprendiz
-    y clasifica 2 C o 3 C ÚNICAMENTE si han transcurrido al menos 5 días hábiles
-    laborales en Colombia (excluyendo sábados, domingos y festivos nacionales).
+    y clasifica:
+    - '2 C' si tiene 2 fallas consecutivas con 5 días hábiles.
+    - '2 C (3)' si tiene racha de 2C madura más una 3.ª falla reciente (< 5 días hábiles).
+    - '3 C' si la 3.ª falla consecutiva ya cumplió sus 5 días hábiles.
     """
     cols_base = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"]
     
@@ -197,12 +199,14 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
         
         fecha_actual = pd.Timestamp.now().normalize()
         
-        # Obtener festivos oficiales de Colombia
+        # Festivos nacionales de Colombia
         anios = [fecha_actual.year - 1, fecha_actual.year, fecha_actual.year + 1]
         festivos_colombia = holidays.Colombia(years=anios)
         
         def contar_dias_habiles_colombia(fecha_inicio, fecha_fin):
-            """Cuenta días de lunes a viernes descartando festivos de Colombia."""
+            """Cuenta días laborales descartando sábados, domingos y festivos."""
+            if pd.isna(fecha_inicio) or pd.isna(fecha_fin) or fecha_inicio > fecha_fin:
+                return 0
             dias = pd.date_range(start=fecha_inicio, end=fecha_fin, freq="D")
             dias_habiles = [
                 d for d in dias 
@@ -215,29 +219,47 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
             if total_fallas == 0:
                 return pd.Series({"FACU": None})
             
-            fallas_df = grupo_df[grupo_df["Asistencia"] == "IS"]
-            ultima_fecha_falla = fallas_df["Fecha"].max().normalize()
+            asistencias_con_fecha = grupo_df[grupo_df["Asistencia"].isin(["A", "IS", "AR"])][["Asistencia", "Fecha"]].values.tolist()
             
-            dias_habiles_transcurridos = contar_dias_habiles_colombia(ultima_fecha_falla, fecha_actual)
-            
-            asistencias = grupo_df["Asistencia"].tolist()
             max_consecutivas = 0
             contador_actual = 0
+            fecha_2_consecutiva = None
+            fecha_3_consecutiva = None
             
-            for estado in asistencias:
+            for estado, fecha in asistencias_con_fecha:
                 if estado == "IS":
                     contador_actual += 1
+                    if contador_actual == 2 and fecha_2_consecutiva is None:
+                        fecha_2_consecutiva = fecha
+                    elif contador_actual == 3 and fecha_3_consecutiva is None:
+                        fecha_3_consecutiva = fecha
+                    
                     if contador_actual > max_consecutivas:
                         max_consecutivas = contador_actual
                 else:
                     contador_actual = 0
             
-            cumple_dias_habiles = dias_habiles_transcurridos >= 5
+            # Calcular días hábiles independientes para cada hito
+            dh_2c = contar_dias_habiles_colombia(fecha_2_consecutiva.normalize(), fecha_actual) if fecha_2_consecutiva is not None else 0
+            dh_3c = contar_dias_habiles_colombia(fecha_3_consecutiva.normalize(), fecha_actual) if fecha_3_consecutiva is not None else 0
             
-            if max_consecutivas == 2 and total_fallas == 2 and cumple_dias_habiles:
-                facu_str = f"{total_fallas} C"
-            elif max_consecutivas == 3 and total_fallas == 3 and cumple_dias_habiles:
-                facu_str = f"{total_fallas} C"
+            cumple_2c = dh_2c >= 5
+            cumple_3c = dh_3c >= 5
+            
+            # Formato de visualización
+            if max_consecutivas >= 3:
+                if cumple_3c:
+                    facu_str = "3 C"
+                elif cumple_2c:
+                    # Racha de 2C madura + 3.ª falla aún no madura
+                    facu_str = f"2 C ({total_fallas})"
+                else:
+                    facu_str = f"{total_fallas}"
+            elif max_consecutivas == 2:
+                if cumple_2c:
+                    facu_str = "2 C"
+                else:
+                    facu_str = f"{total_fallas}"
             else:
                 facu_str = f"{total_fallas}"
                 
@@ -256,7 +278,6 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
     except Exception as e:
         st.error(f"Error al calcular fallas acumuladas: {e}")
         return pd.DataFrame(columns=cols_base)
-
 # ==========================================
 # FUNCIÓN: DIÁLOGO EMERGENTE DE ALERTA
 # ==========================================
@@ -461,10 +482,10 @@ with tab1:
     df_facu_actual = calcular_fallas_acumuladas("asistencia_guardada.csv")
     
     if not df_facu_actual.empty and "Grupo" in df_facu_actual.columns:
-        alertas_grupo = df_facu_actual[
-            (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
-            (df_facu_actual["FACU"].isin(["2 C", "3 C"]))
-        ]
+    alertas_grupo = df_facu_actual[
+        (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
+        (df_facu_actual["FACU"].str.contains("2 C|3 C", na=False))
+    ]
         
         if not alertas_grupo.empty:
             st.warning(f"🚨 **Alerta Instructor:** Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas acumuladas que superan 5 días hábiles en este grupo.")
