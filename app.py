@@ -482,10 +482,10 @@ with tab1:
     df_facu_actual = calcular_fallas_acumuladas("asistencia_guardada.csv")
     
     if not df_facu_actual.empty and "Grupo" in df_facu_actual.columns:
-    alertas_grupo = df_facu_actual[
-        (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
-        (df_facu_actual["FACU"].str.contains("2 C|3 C", na=False))
-    ]
+        alertas_grupo = df_facu_actual[
+            (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
+            (df_facu_actual["FACU"].isin(["2 C", "3 C"]))
+        ]
         
         if not alertas_grupo.empty:
             st.warning(f"🚨 **Alerta Instructor:** Hay {len(alertas_grupo)} aprendiz(ces) con fallas consecutivas acumuladas que superan 5 días hábiles en este grupo.")
