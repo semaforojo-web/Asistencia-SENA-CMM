@@ -285,15 +285,7 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
 def mostrar_alerta_fallas(df_alertas):
     st.error("¡Atención! Se han detectado aprendices con fallas consecutivas acumuladas (2 C / 3 C):")
     st.dataframe(df_alertas[["Documento", "Nombre", "FACU"]], use_container_width=True)
-    st.info("Por favor, realice el reporte o seguimiento correspondiente ante la coordinación.
-    Si el valor es 2C el modelo es el siguiente: Asunto: Alerta por inasistencia aprendiz NOMBRE DEL APRENDIZ grupo NÚMERO DE GRUPO. 
-    Cuerpo del correo: Señor NOMBRE DEL APRENDIZ con CC DOCUMENTO DEL APRENDIZ perteneciente al grupo de formación NÚMERO DE GRUPO del Centro Metalmecánico, a la fecha presenta dos inasistencias con el instructor Henry Alexander Garzón Durán, se genera una alerta pues se encuentra a una falla para configurar deserción, por favor comunicarse con el instructor.
-    Se genera copia para la coordinación académica con bienestar al aprendiz.
-    Cordial saludo
-    Si el valor es 3C o 5 el modelo es el siguiente: Asunto: Reporte de deserción aprendiz NOMBRE DEL APRENDIZ grupo NÚMERO DE GRUPO. 
-    Cuerpo del correo: Señor NOMBRE DEL APRENDIZ con CC DOCUMENTO DEL APRENDIZ perteneciente al grupo de formación NÚMERO DE GRUPO del Centro Metalmecánico, a la fecha usted cumple con las condiciones requeridas por el reglamento del aprendiz para iniciar el proceso de deserción.
-    Se adjunta formato de reporte de deserción donde se indican las fechas en las cuales usted no ha asistido a la formación.
-    Se genera copia para la coordinación académica con copia a bienestar al aprendiz")
+    st.info("Por favor, realice el reporte o seguimiento correspondiente ante la coordinación. Si el valor es 2C el modelo es el siguiente: Asunto: Alerta por inasistencia aprendiz NOMBRE DEL APRENDIZ grupo NÚMERO DE GRUPO.  Cuerpo del correo: Señor NOMBRE DEL APRENDIZ con CC DOCUMENTO DEL APRENDIZ perteneciente al grupo de formación NÚMERO DE GRUPO del Centro Metalmecánico, a la fecha presenta dos inasistencias con el instructor Henry Alexander Garzón Durán, se genera una alerta pues se encuentra a una falla para configurar deserción, por favor comunicarse con el instructor.    Se genera copia para la coordinación académica con bienestar al aprendiz.  Cordial saludo.    Si el valor es 3C o 5 el modelo es el siguiente: Asunto: Reporte de deserción aprendiz NOMBRE DEL APRENDIZ grupo NÚMERO DE GRUPO.   Cuerpo del correo: Señor NOMBRE DEL APRENDIZ con CC DOCUMENTO DEL APRENDIZ perteneciente al grupo de formación NÚMERO DE GRUPO del Centro Metalmecánico, a la fecha usted cumple con las condiciones requeridas por el reglamento del aprendiz para iniciar el proceso de deserción. Se adjunta formato de reporte de deserción donde se indican las fechas en las cuales usted no ha asistido a la formación. Se genera copia para la coordinación académica con copia a bienestar al aprendiz")
 
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
