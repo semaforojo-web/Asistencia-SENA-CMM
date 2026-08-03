@@ -172,11 +172,8 @@ def obtener_trimestre_actual():
 # ==========================================
 def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
     """
-    Lee asistencia_guardada.csv, calcula el total de fallas ("IS") por aprendiz
-    y clasifica:
-    - '2 C' si tiene 2 fallas consecutivas con 5 días hábiles.
-    - '2 C (3)' si tiene racha de 2C madura más una 3.ª falla reciente (< 5 días hábiles).
-    - '3 C' si la 3.ª falla consecutiva ya cumplió sus 5 días hábiles.
+    Lee asistencia_guardada.csv y retorna un DataFrame con la cadena FACU estructurada como:
+    (Fallas >= 5 días hábiles) (Total Fallas) (Consecutivas Validadas)
     """
     cols_base = ["Grupo", "Instructor", "Trimestre", "Asignacion_Num", "Documento", "Nombre", "FACU"]
     
@@ -225,55 +222,17 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
             contador_actual = 0
             fecha_2_consecutiva = None
             fecha_3_consecutiva = None
-            
-            for estado, fecha in asistencias_con_fecha:
-                if estado == "IS":
-                    contador_actual += 1
-                    if contador_actual == 2 and fecha_2_consecutiva is None:
-                        fecha_2_consecutiva = fecha
-                    elif contador_actual == 3 and fecha_3_consecutiva is None:
-                        fecha_3_consecutiva = fecha
-                    
-                    if contador_actual > max_consecutivas:
-                        max_consecutivas = contador_actual
-                else:
-                    contador_actual = 0
-            
-            # Calcular días hábiles independientes para cada hito
-            dh_2c = contar_dias_habiles_colombia(fecha_2_consecutiva.normalize(), fecha_actual) if fecha_2_consecutiva is not None else 0
-            dh_3c = contar_dias_habiles_colombia(fecha_3_consecutiva.normalize(), fecha_actual) if fecha_3_consecutiva is not None else 0
-            
-            cumple_2c = dh_2c >= 5
-            cumple_3c = dh_3c >= 5
-            
-            # Formato de visualización
-            if max_consecutivas >= 3:
-                if cumple_3c:
-        def procesar_fallas_grupo(grupo_df):
-            total_fallas = (grupo_df["Asistencia"] == "IS").sum()
-            if total_fallas == 0:
-                return pd.Series({"FACU": None})
-            
-            # Obtener todas las asistencias cronológicas
-            asistencias_con_fecha = grupo_df[grupo_df["Asistencia"].isin(["A", "IS", "AR"])][["Asistencia", "Fecha"]].values.tolist()
-            
-            max_consecutivas = 0
-            contador_actual = 0
-            fecha_2_consecutiva = None
-            fecha_3_consecutiva = None
             fallas_habiles_cumplidas = 0
             
             for estado, fecha in asistencias_con_fecha:
                 if estado == "IS":
                     contador_actual += 1
                     
-                    # Evaluar si esta falla individual ya cumplió los 5 días hábiles
                     if pd.notna(fecha):
                         dh_falla = contar_dias_habiles_colombia(fecha.normalize(), fecha_actual)
                         if dh_falla >= 5:
                             fallas_habiles_cumplidas += 1
                     
-                    # Registrar hitos de rachas consecutivas
                     if contador_actual == 2 and fecha_2_consecutiva is None:
                         fecha_2_consecutiva = fecha
                     elif contador_actual == 3 and fecha_3_consecutiva is None:
@@ -284,14 +243,12 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
                 else:
                     contador_actual = 0
             
-            # Calcular días hábiles para los hitos de rachas consecutivas
             dh_2c = contar_dias_habiles_colombia(fecha_2_consecutiva.normalize(), fecha_actual) if fecha_2_consecutiva is not None else 0
             dh_3c = contar_dias_habiles_colombia(fecha_3_consecutiva.normalize(), fecha_actual) if fecha_3_consecutiva is not None else 0
             
             cumple_2c = dh_2c >= 5
             cumple_3c = dh_3c >= 5
             
-            # Determinar el estado de la racha consecutiva (2C, 3C o Ninguna)
             if max_consecutivas >= 3 and cumple_3c:
                 str_consecutiva = "3C"
             elif max_consecutivas >= 2 and cumple_2c:
@@ -299,10 +256,15 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
             else:
                 str_consecutiva = "0C"
             
-            # Formato final: (Fallas >= 5 días hábiles) (Total Fallas) (Consecutivas Validadas)
             facu_str = f"({fallas_habiles_cumplidas}) ({total_fallas}) ({str_consecutiva})"
-                
             return pd.Series({"FACU": facu_str})
+
+        df_facu = df_asistencia.groupby(cols_agrupacion, as_index=False).apply(procesar_fallas_grupo)
+        return df_facu.dropna(subset=["FACU"])
+        
+    except Exception as e:
+        st.sidebar.error(f"Error al calcular FACU: {e}")
+        return pd.DataFrame(columns=cols_base)
 
 # ==========================================
 # FUNCIÓN: DIÁLOGO EMERGENTE DE ALERTA
@@ -312,7 +274,6 @@ def mostrar_alerta_fallas(df_alertas):
     st.error("¡Atención! Se han detectado aprendices con fallas consecutivas acumuladas (2 C / 3 C):")
     st.dataframe(df_alertas[["Documento", "Nombre", "FACU"]], use_container_width=True)
     
-    # Texto con formato Markdown para mejorar la lectura
     texto_alerta = """
 **Por favor, realice el reporte o seguimiento correspondiente ante la coordinación.**
 
@@ -343,6 +304,7 @@ Reporte de deserción aprendiz NOMBRE DEL APRENDIZ grupo NÚMERO DE GRUPO.
 > Se genera copia para la coordinación académica con copia a bienestar al aprendiz.
 """
     st.info(texto_alerta)
+
 # ==========================================
 # FUNCIONES DE LECTURA DIRECTA DESDE GITHUB
 # ==========================================
@@ -540,7 +502,7 @@ with tab1:
     if not df_facu_actual.empty and "Grupo" in df_facu_actual.columns:
         alertas_grupo = df_facu_actual[
             (df_facu_actual["Grupo"].astype(str) == str(grupo_seleccionado)) & 
-            (df_facu_actual["FACU"].str.contains("2 C|3 C", na=False))
+            (df_facu_actual["FACU"].str.contains(r"\(2C\)|\(3C\)", na=False, regex=True))
         ]
         
         if not alertas_grupo.empty:
@@ -548,7 +510,6 @@ with tab1:
             if st.button("🔔 Ver Alerta Emergente", key="btn_alerta_modal"):
                 mostrar_alerta_fallas(alertas_grupo)
     # -------------------------------------------------------------
-
     fecha_asistencia = st.date_input("Fecha del llamado a lista:", datetime.now())
     
     if alumnos_grupo.empty:
@@ -606,7 +567,6 @@ with tab1:
                     st.success("🔄 ¡Historial de Asistencias respaldado en GitHub!")
                 except Exception as e:
                     st.warning(f"Guardado local, pero no se pudo subir a GitHub: {e}")
-
 # PESTAÑA 2: EVALUACIÓN
 with tab2:
     st.header(f"📝 Registro de Juicios Evaluativos")
@@ -705,7 +665,6 @@ with tab3:
             )
         else:
             st.success("🎉 No se registran aprendices con inasistencias acumuladas (IS > 0).")
-
 # PESTAÑA 4: GESTIÓN DE BASES DE DATOS
 with tab4:
     st.header("📂 Gestión y Alimentación de la Base de Datos")
