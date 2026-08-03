@@ -249,35 +249,61 @@ def calcular_fallas_acumuladas(archivo_csv="asistencia_guardada.csv"):
             # Formato de visualización
             if max_consecutivas >= 3:
                 if cumple_3c:
-                    facu_str = "3 C"
-                elif cumple_2c:
-                    # Racha de 2C madura + 3.ª falla aún no madura
-                    facu_str = f"2 C ({total_fallas})"
+        def procesar_fallas_grupo(grupo_df):
+            total_fallas = (grupo_df["Asistencia"] == "IS").sum()
+            if total_fallas == 0:
+                return pd.Series({"FACU": None})
+            
+            # Obtener todas las asistencias cronológicas
+            asistencias_con_fecha = grupo_df[grupo_df["Asistencia"].isin(["A", "IS", "AR"])][["Asistencia", "Fecha"]].values.tolist()
+            
+            max_consecutivas = 0
+            contador_actual = 0
+            fecha_2_consecutiva = None
+            fecha_3_consecutiva = None
+            fallas_habiles_cumplidas = 0
+            
+            for estado, fecha in asistencias_con_fecha:
+                if estado == "IS":
+                    contador_actual += 1
+                    
+                    # Evaluar si esta falla individual ya cumplió los 5 días hábiles
+                    if pd.notna(fecha):
+                        dh_falla = contar_dias_habiles_colombia(fecha.normalize(), fecha_actual)
+                        if dh_falla >= 5:
+                            fallas_habiles_cumplidas += 1
+                    
+                    # Registrar hitos de rachas consecutivas
+                    if contador_actual == 2 and fecha_2_consecutiva is None:
+                        fecha_2_consecutiva = fecha
+                    elif contador_actual == 3 and fecha_3_consecutiva is None:
+                        fecha_3_consecutiva = fecha
+                    
+                    if contador_actual > max_consecutivas:
+                        max_consecutivas = contador_actual
                 else:
-                    facu_str = f"{total_fallas}"
-            elif max_consecutivas == 2:
-                if cumple_2c:
-                    facu_str = "2 C"
-                else:
-                    facu_str = f"{total_fallas}"
+                    contador_actual = 0
+            
+            # Calcular días hábiles para los hitos de rachas consecutivas
+            dh_2c = contar_dias_habiles_colombia(fecha_2_consecutiva.normalize(), fecha_actual) if fecha_2_consecutiva is not None else 0
+            dh_3c = contar_dias_habiles_colombia(fecha_3_consecutiva.normalize(), fecha_actual) if fecha_3_consecutiva is not None else 0
+            
+            cumple_2c = dh_2c >= 5
+            cumple_3c = dh_3c >= 5
+            
+            # Determinar el estado de la racha consecutiva (2C, 3C o Ninguna)
+            if max_consecutivas >= 3 and cumple_3c:
+                str_consecutiva = "3C"
+            elif max_consecutivas >= 2 and cumple_2c:
+                str_consecutiva = "2C"
             else:
-                facu_str = f"{total_fallas}"
+                str_consecutiva = "0C"
+            
+            # Formato final: (Fallas >= 5 días hábiles) (Total Fallas) (Consecutivas Validadas)
+            facu_str = f"({fallas_habiles_cumplidas}) ({total_fallas}) ({str_consecutiva})"
                 
             return pd.Series({"FACU": facu_str})
 
-        df_fallas = (
-            df_asistencia
-            .groupby(cols_agrupacion, group_keys=False)
-            .apply(procesar_fallas_grupo)
-            .reset_index()
-        )
-        
-        fallas_acumuladas = df_fallas[df_fallas["FACU"].notna()].reset_index(drop=True)
-        return fallas_acumuladas
-
-    except Exception as e:
-        st.error(f"Error al calcular fallas acumuladas: {e}")
-        return pd.DataFrame(columns=cols_base)
 # ==========================================
 # FUNCIÓN: DIÁLOGO EMERGENTE DE ALERTA
 # ==========================================
